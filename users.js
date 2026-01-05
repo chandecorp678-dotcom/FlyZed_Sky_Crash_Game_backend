@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 
-const users = require("./users");
-const { generateCrashPoint, computePayout } = require("../gameEngine");
+// FIXED: correct relative path
+const { generateCrashPoint, computePayout } = require("./gameEngine");
 
 // health endpoint for frontend probe
 router.get("/health", (req, res) => {
@@ -34,7 +34,9 @@ router.post("/game/payout", express.json(), (req, res) => {
   try {
     const { bet, multiplier } = req.body;
     if (bet == null || multiplier == null) {
-      return res.status(400).json({ error: "Missing 'bet' or 'multiplier' in request body" });
+      return res
+        .status(400)
+        .json({ error: "Missing 'bet' or 'multiplier' in request body" });
     }
     const payout = computePayout(bet, multiplier);
     return res.json({ payout });
@@ -43,8 +45,5 @@ router.post("/game/payout", express.json(), (req, res) => {
     return res.status(500).json({ error: "Server error" });
   }
 });
-
-// mount auth & user endpoints under /api/*
-router.use("/", users);
 
 module.exports = router;
