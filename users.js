@@ -4,9 +4,9 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 
-const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret"; // set a secure secret in Render env
+const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret"; // secure secret in Render env
 
-// small helper to remove sensitive fields before returning user to client
+// ----------------- Helper -----------------
 function sanitizeUser(row) {
   if (!row) return null;
   return {
@@ -57,7 +57,6 @@ router.post("/auth/register", express.json(), async (req, res) => {
     if (!username || !phone || !password)
       return res.status(400).json({ error: "username, phone and password required" });
 
-    // check if phone exists
     const existing = await db.query("SELECT id FROM users WHERE phone = $1", [phone]);
     if (existing.rows.length) return res.status(409).json({ error: "Phone already registered" });
 
@@ -104,12 +103,13 @@ router.post("/auth/login", express.json(), async (req, res) => {
   }
 });
 
-// Middleware: verify token and attach user id
+// ----------------- Auth middleware -----------------
 async function requireAuth(req, res, next) {
   const db = req.app.locals.db;
   const auth = req.headers.authorization || "";
   const match = auth.match(/^Bearer\s+(.+)$/i);
   if (!match) return res.status(401).json({ error: "Missing authorization token" });
+
   const token = match[1];
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -128,6 +128,7 @@ async function requireAuth(req, res, next) {
   }
 }
 
+// ----------------- User routes -----------------
 router.get("/users/me", requireAuth, async (req, res) => {
   return res.json(req.user);
 });
@@ -164,89 +165,6 @@ router.post("/users/withdraw", requireAuth, express.json(), async (req, res) => 
   if (isNaN(amount) || amount <= 0) return res.status(400).json({ error: "amount must be > 0" });
   req.body = { delta: -Math.abs(amount) };
   return router.handle(req, res);
-});
-
-module.exports = router;    console.error("Login error:", err);
-    return res.status(500).json({ error: "Server error" });
-  }
-});
-
-// Middleware: verify token and attach user id
-async function requireAuth(req, res, next) {
-  const db = req.app.locals.db;
-  const auth = req.headers.authorization || "";
-  const match = auth.match(/^Bearer\s+(.+)$/i);
-  if (!match) return res.status(401).json({ error: "Missing authorization token" });
-  const token = match[1];
-  try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    if (!payload || !payload.uid) return res.status(401).json({ error: "Invalid token" });
-    // load user and attach
-    const row = await db.get("SELECT * FROM users WHERE id = ?", payload.uid);
-    if (!row) return res.status(401).json({ error: "User not found" });
-    req.user = sanitizeUser(row);
-    req.userRaw = row;
-    next();
-  } catch (err) {
-    console.error("Auth verify error:", err && err.message);
-    return res.status(401).json({ error: "Invalid or expired token" });
-  }
-}
-
-// GET /api/users/me
-router.get("/users/me", requireAuth, async (req, res) => {
-  return res.json(req.user);
-});
-
-// POST /api/users/balance/change
-// Body: { delta: number } (can be negative)
-router.post("/users/balance/change", requireAuth, express.json(), async (req, res) => {
-  const db = req.app.locals.db;
-  try {
-    const delta = Number(req.body && req.body.delta);
-    if (isNaN(delta)) return res.status(400).json({ error: "delta must be a number" });
-
-    const currentBalance = Number(req.user.balance || 0);
-    const newBalance = currentBalance + delta;
-    if (newBalance < 0) return res.status(400).json({ error: "Insufficient funds" });
-
-    const now = new Date().toISOString();
-    await db.run("UPDATE users SET balance = ?, updatedAt = ? WHERE id = ?", [newBalance, now, req.user.id]);
-
-    const row = await db.get("SELECT * FROM users WHERE id = ?", req.user.id);
-    return res.json(sanitizeUser(row));
-  } catch (err) {
-    console.error("Balance change error:", err);
-    return res.status(500).json({ error: "Server error" });
-  }
-});
-
-// POST /api/users/deposit
-// Body: { amount: number }
-router.post("/users/deposit", requireAuth, express.json(), async (req, res) => {
-  try {
-    const amount = Number(req.body && req.body.amount);
-    if (isNaN(amount) || amount <= 0) return res.status(400).json({ error: "amount must be > 0" });
-    req.body = { delta: amount };
-    return router.handle(req, res); // delegate to balance/change by reusing route logic
-  } catch (err) {
-    console.error("Deposit error:", err);
-    return res.status(500).json({ error: "Server error" });
-  }
-});
-
-// POST /api/users/withdraw
-// Body: { amount: number }
-router.post("/users/withdraw", requireAuth, express.json(), async (req, res) => {
-  try {
-    const amount = Number(req.body && req.body.amount);
-    if (isNaN(amount) || amount <= 0) return res.status(400).json({ error: "amount must be > 0" });
-    req.body = { delta: -Math.abs(amount) };
-    return router.handle(req, res); // delegate to balance/change
-  } catch (err) {
-    console.error("Withdraw error:", err);
-    return res.status(500).json({ error: "Server error" });
-  }
 });
 
 module.exports = router;
