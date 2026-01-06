@@ -14,24 +14,17 @@ function sanitizeUser(row) {
     username: row.username,
     phone: row.phone,
     balance: Number(row.balance || 0),
-    freeRounds: Number(row.freeRounds || 0),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    freeRounds: Number(row.freerounds || 0),
+    createdAt: row.createdat,
+    updatedAt: row.updatedat,
   };
 }
 
 // ----------------- Health + Game helpers -----------------
-
-// health endpoint for frontend probe
 router.get("/health", (req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
 });
 
-/**
- * GET /api/game/round
- * Returns a freshly generated crash point for a round.
- * Example response: { "crashPoint": 1.34 }
- */
 const { generateCrashPoint, computePayout } = require("./gameEngine");
 router.get("/game/round", (req, res) => {
   try {
@@ -43,20 +36,11 @@ router.get("/game/round", (req, res) => {
   }
 });
 
-/**
- * POST /api/game/payout
- * Body: { bet: number, multiplier: number }
- * Returns calculated payout for the given bet and multiplier.
- * Example response: { "payout": 12.5 }
- */
 router.post("/game/payout", express.json(), (req, res) => {
   try {
     const { bet, multiplier } = req.body;
-    if (bet == null || multiplier == null) {
-      return res
-        .status(400)
-        .json({ error: "Missing 'bet' or 'multiplier' in request body" });
-    }
+    if (bet == null || multiplier == null)
+      return res.status(400).json({ error: "Missing 'bet' or 'multiplier'" });
     const payout = computePayout(bet, multiplier);
     return res.json({ payout });
   } catch (err) {
@@ -66,35 +50,29 @@ router.post("/game/payout", express.json(), (req, res) => {
 });
 
 // ----------------- Auth & User endpoints -----------------
-
-// POST /api/auth/register
-// Body: { username, phone, password }
 router.post("/auth/register", express.json(), async (req, res) => {
   const db = req.app.locals.db;
   try {
     const { username, phone, password } = req.body || {};
-    if (!username || !phone || !password) {
+    if (!username || !phone || !password)
       return res.status(400).json({ error: "username, phone and password required" });
-    }
 
-    // check existing phone
-    const existing = await db.get("SELECT id FROM users WHERE phone = ?", phone);
-    if (existing) {
-      return res.status(409).json({ error: "Phone already registered" });
-    }
+    // check if phone exists
+    const existing = await db.query("SELECT id FROM users WHERE phone = $1", [phone]);
+    if (existing.rows.length) return res.status(409).json({ error: "Phone already registered" });
 
     const id = uuidv4();
     const now = new Date().toISOString();
     const password_hash = await bcrypt.hash(password, 10);
 
-    await db.run(
-      `INSERT INTO users (id, username, phone, password_hash, balance, freeRounds, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    await db.query(
+      `INSERT INTO users (id, username, phone, password_hash, balance, freerounds, createdat, updatedat)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
       [id, username, phone, password_hash, 0, 0, now, now]
     );
 
-    const userRow = await db.get("SELECT * FROM users WHERE id = ?", id);
-    const user = sanitizeUser(userRow);
+    const userRow = await db.query("SELECT * FROM users WHERE id = $1", [id]);
+    const user = sanitizeUser(userRow.rows[0]);
     const token = jwt.sign({ uid: id }, JWT_SECRET, { expiresIn: "30d" });
 
     return res.status(201).json({ token, user });
@@ -104,20 +82,15 @@ router.post("/auth/register", express.json(), async (req, res) => {
   }
 });
 
-// POST /api/auth/login
-// Body: { phone, password }
 router.post("/auth/login", express.json(), async (req, res) => {
   const db = req.app.locals.db;
   try {
     const { phone, password } = req.body || {};
-    if (!phone || !password) {
-      return res.status(400).json({ error: "phone and password required" });
-    }
+    if (!phone || !password) return res.status(400).json({ error: "phone and password required" });
 
-    const row = await db.get("SELECT * FROM users WHERE phone = ?", phone);
-    if (!row) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
+    const rowRes = await db.query("SELECT * FROM users WHERE phone = $1", [phone]);
+    const row = rowRes.rows[0];
+    if (!row) return res.status(401).json({ error: "Invalid credentials" });
 
     const ok = await bcrypt.compare(password, row.password_hash || "");
     if (!ok) return res.status(401).json({ error: "Invalid credentials" });
@@ -127,6 +100,73 @@ router.post("/auth/login", express.json(), async (req, res) => {
     return res.json({ token, user });
   } catch (err) {
     console.error("Login error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Middleware: verify token and attach user id
+async function requireAuth(req, res, next) {
+  const db = req.app.locals.db;
+  const auth = req.headers.authorization || "";
+  const match = auth.match(/^Bearer\s+(.+)$/i);
+  if (!match) return res.status(401).json({ error: "Missing authorization token" });
+  const token = match[1];
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (!payload || !payload.uid) return res.status(401).json({ error: "Invalid token" });
+
+    const rowRes = await db.query("SELECT * FROM users WHERE id = $1", [payload.uid]);
+    const row = rowRes.rows[0];
+    if (!row) return res.status(401).json({ error: "User not found" });
+
+    req.user = sanitizeUser(row);
+    req.userRaw = row;
+    next();
+  } catch (err) {
+    console.error("Auth verify error:", err.message);
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+router.get("/users/me", requireAuth, async (req, res) => {
+  return res.json(req.user);
+});
+
+router.post("/users/balance/change", requireAuth, express.json(), async (req, res) => {
+  const db = req.app.locals.db;
+  try {
+    const delta = Number(req.body?.delta);
+    if (isNaN(delta)) return res.status(400).json({ error: "delta must be a number" });
+
+    const newBalance = req.user.balance + delta;
+    if (newBalance < 0) return res.status(400).json({ error: "Insufficient funds" });
+
+    const now = new Date().toISOString();
+    await db.query("UPDATE users SET balance=$1, updatedat=$2 WHERE id=$3", [newBalance, now, req.user.id]);
+
+    const rowRes = await db.query("SELECT * FROM users WHERE id=$1", [req.user.id]);
+    return res.json(sanitizeUser(rowRes.rows[0]));
+  } catch (err) {
+    console.error("Balance change error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/users/deposit", requireAuth, express.json(), async (req, res) => {
+  const amount = Number(req.body?.amount);
+  if (isNaN(amount) || amount <= 0) return res.status(400).json({ error: "amount must be > 0" });
+  req.body = { delta: amount };
+  return router.handle(req, res);
+});
+
+router.post("/users/withdraw", requireAuth, express.json(), async (req, res) => {
+  const amount = Number(req.body?.amount);
+  if (isNaN(amount) || amount <= 0) return res.status(400).json({ error: "amount must be > 0" });
+  req.body = { delta: -Math.abs(amount) };
+  return router.handle(req, res);
+});
+
+module.exports = router;    console.error("Login error:", err);
     return res.status(500).json({ error: "Server error" });
   }
 });
