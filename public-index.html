@@ -72,6 +72,7 @@
       left: 10px;
     }
 
+    /* ORIGINAL SVG plane restored */
     #plane {
       width: 80px;
       position: absolute;
@@ -150,6 +151,7 @@
 <div class="game-box">
   <div id="multiplier">1.00x</div>
 
+  <!-- ORIGINAL plane SVG -->
   <svg id="plane" viewBox="0 0 64 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M4 18 C18 18 32 16 46 12 C50 11 54 9 60 8 L58 6 C52 7 48 9 44 10 C30 14 18 16 6 18 Z" fill="#FFD54F"/>
     <path d="M18 18 L36 10 L40 12 L24 20 Z" fill="#FF7043"/>
@@ -170,6 +172,7 @@
   <button onclick="withdraw()">Withdraw ZMW</button>
 </div>
 
+<!-- LOGIN MODAL -->
 <div class="modal" id="loginModal">
   <div class="modal-content">
     <h3>Login</h3>
@@ -180,6 +183,7 @@
   </div>
 </div>
 
+<!-- REGISTER MODAL -->
 <div class="modal" id="registerModal">
   <div class="modal-content">
     <h3>Register</h3>
@@ -192,7 +196,7 @@
 </div>
 
 <script>
-const API = "https://ka-ndeke-backend-5dgy.onrender.com/api"; // <-- updated backend
+const API = "https://ka-ndeke-backend-5dgy.onrender.com";
 
 let user = { guest: true };
 let balance = 10;
@@ -209,7 +213,8 @@ const logoutBtn = document.getElementById("logoutBtn");
 const guestBtn = document.getElementById("guestBtn");
 
 function updateUI() {
-  document.getElementById("username").textContent = user.name || "Guest";
+  // 🔧 FIX 1 — display actual username instead of guest
+  document.getElementById("username").textContent = user.username || "Guest";
   document.getElementById("balance").textContent = balance.toFixed(2);
 
   if(user.guest) {
@@ -296,6 +301,7 @@ async function login() {
     if (!res.ok) throw new Error(data.error || "Login failed");
 
     user = data.user;
+    user.token = data.token; // 🔧 store token for backend calls
     balance = Number(data.balance || 5);
     hideModals();
     updateUI();
@@ -320,6 +326,7 @@ async function register() {
     if (!res.ok) throw new Error(data.error || "Register failed");
 
     user = data.user;
+    user.token = data.token; // store token
     balance = 10;
     hideModals();
     updateUI();
@@ -336,29 +343,70 @@ function logout() {
 
 /* GUEST MODE */
 function useGuest() {
-  user = { guest: true, name: "Guest" };
+  user = { guest: true, username: "Guest" };
   balance = Number(localStorage.getItem("guest_balance") || 10);
   updateUI();
 }
 
 /* WALLET */
-function deposit() {
+// 🔧 FIX 2 — backend deposit/withdraw for logged-in users
+async function deposit() {
   const amt = prompt("Enter deposit amount");
   if(!amt || isNaN(amt) || amt <= 0) return alert("Invalid amount");
-  balance += Number(amt);
-  if(user.guest) localStorage.setItem("guest_balance", balance);
-  updateUI();
+
+  if(user.guest) {
+    balance += Number(amt);
+    localStorage.setItem("guest_balance", balance);
+    updateUI();
+  } else {
+    try {
+      const res = await fetch(API + "/users/deposit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + (user.token || "")
+        },
+        body: JSON.stringify({ amount: Number(amt) })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Deposit failed");
+      balance = data.balance;
+      updateUI();
+    } catch(err) {
+      alert(err.message);
+    }
+  }
 }
 
-function withdraw() {
+async function withdraw() {
   const amt = prompt("Enter withdraw amount");
   if(!amt || isNaN(amt) || amt <= 0) return alert("Invalid amount");
   if(amt > balance) return alert("Insufficient balance");
-  balance -= Number(amt);
-  if(user.guest) localStorage.setItem("guest_balance", balance);
-  updateUI();
+
+  if(user.guest) {
+    balance -= Number(amt);
+    localStorage.setItem("guest_balance", balance);
+    updateUI();
+  } else {
+    try {
+      const res = await fetch(API + "/users/withdraw", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + (user.token || "")
+        },
+        body: JSON.stringify({ amount: Number(amt) })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Withdraw failed");
+      balance = data.balance;
+      updateUI();
+    } catch(err) {
+      alert(err.message);
+    }
+  }
 }
 </script>
 
 </body>
-                              </html>
+    </html>
