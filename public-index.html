@@ -296,10 +296,12 @@ async function login() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Login failed");
 
-    user = data.user;
-    balance = Number(data.balance || 5);
-    hideModals();
-    updateUI();
+    localStorage.setItem("token", data.token);          // store JWT token
+localStorage.setItem("username", data.user.username); // store username
+user = data.user;
+balance = Number(data.balance || 5);
+hideModals();
+updateUI();
   } catch(err) {
     alert(err.message);
   }
@@ -320,10 +322,12 @@ async function register() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Register failed");
 
-    user = data.user;
-    balance = 10;
-    hideModals();
-    updateUI();
+    localStorage.setItem("token", data.token);          // store JWT token
+localStorage.setItem("username", data.user.username); // store username
+user = data.user;
+balance = 10;
+hideModals();
+updateUI();
   } catch(err) {
     alert(err.message);
   }
@@ -345,8 +349,7 @@ function useGuest() {
 /* WALLET */
 async function deposit() {
   if (!user || user.guest) return alert("You must be logged in to deposit");
-  const amt = prompt("Enter deposit amount");
-  if (!amt || isNaN(amt) || amt <= 0) return alert("Invalid amount");
+  const amt = Number(prompt("Enter deposit amount"));  // convert input to number immediately
 
   try {
     const token = localStorage.getItem("token");
@@ -371,8 +374,7 @@ async function deposit() {
 
 async function withdraw() {
   if (!user || user.guest) return alert("You must be logged in to withdraw");
-  const amt = prompt("Enter withdraw amount");
-  if (!amt || isNaN(amt) || amt <= 0) return alert("Invalid amount");
+  const amt = Number(prompt("Enter withdraw amount"));  // convert input to number immediately
 
   try {
     const token = localStorage.getItem("token");
