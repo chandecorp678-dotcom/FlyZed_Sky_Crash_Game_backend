@@ -133,7 +133,8 @@ router.get("/users/me", requireAuth, async (req, res) => {
   return res.json(req.user);
 });
 
-router.post("/users/balance/change", requireAuth, express.json(), async (req, res) => {
+// Extracted handler for changing balance
+async function changeBalanceHandler(req, res) {
   const db = req.app.locals.db;
   try {
     const delta = Number(req.body?.delta);
@@ -151,20 +152,26 @@ router.post("/users/balance/change", requireAuth, express.json(), async (req, re
     console.error("Balance change error:", err);
     return res.status(500).json({ error: "Server error" });
   }
-});
+}
 
+// Route uses the extracted handler
+router.post("/users/balance/change", requireAuth, express.json(), changeBalanceHandler);
+
+// Deposit route — no router.handle(), call the handler directly
 router.post("/users/deposit", requireAuth, express.json(), async (req, res) => {
   const amount = Number(req.body?.amount);
   if (isNaN(amount) || amount <= 0) return res.status(400).json({ error: "amount must be > 0" });
+  // reuse the balance handler
   req.body = { delta: amount };
-  return router.handle(req, res);
+  return changeBalanceHandler(req, res);
 });
 
+// Withdraw route — same pattern
 router.post("/users/withdraw", requireAuth, express.json(), async (req, res) => {
   const amount = Number(req.body?.amount);
   if (isNaN(amount) || amount <= 0) return res.status(400).json({ error: "amount must be > 0" });
   req.body = { delta: -Math.abs(amount) };
-  return router.handle(req, res);
+  return changeBalanceHandler(req, res);
 });
 
 module.exports = router;
