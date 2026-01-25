@@ -24,7 +24,82 @@
     .modal-content h3 { margin-top: 0; }
     .modal-content input { width: 100%; margin-bottom: 10px; padding: 8px; color: #fff; background: #0b1b33; border: 1px solid #444; border-radius: 4px; }
     .hidden { display: none; }
+  /* AppsGeyser color override - paste this at the END of your existing <style> block */
+
+/* Ensure page background and text color are forced */
+html, body {
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #081a2b !important;  /* page background (dark) */
+  color: #ffffff !important;       /* primary text color */
+  -webkit-text-size-adjust: 100% !important;
+}
+
+/* Header */
+header {
+  background: #03101f !important;
+  color: #FFD700 !important;
+}
+header h1 { color: #FFD700 !important; }
+
+/* Main panel and surrounding UI */
+.panel { background: transparent !important; color: #ffffff !important; }
+
+/* Game box (main play area) */
+.game-box {
+  background: #12345a !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+}
+#multiplier { color: #ffffff !important; }
+
+/* Inputs */
+input, .modal-content input {
+  background: #0b1b33 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+}
+
+/* Buttons */
+button, .controls button { color: inherit !important; border: none !important; }
+
+/* Primary and danger buttons */
+.primary { background: #FFD700 !important; color: #000 !important; font-weight: 700 !important; }
+.danger  { background: #d7263d !important; color: #fff !important; }
+
+/* Deposit/Withdraw buttons (white look) */
+button[onclick*="deposit"], button[onclick*="withdraw"],
+button:where(.deposit, .withdraw) {
+  background: #f0f0f0 !important;
+  color: #111 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+}
+
+/* Modals / overlays */
+.modal { background: rgba(0,0,0,0.8) !important; }
+.modal-content {
+  background: #0c223a !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* User info text */
+#userInfo, #username, #balance { color: #ffffff !important; }
+
+/* Force large white containers to be transparent */
+div, section, main, article { background-color: transparent !important; }
+
+/* Try to cover AppsGeyser wrapper classes */
+.app, .webview, .wrapper, .container { background: transparent !important; }
+
+/* Links & pseudo elements */
+a { color: #FFD700 !important; }
+*::before, *::after { background: transparent !important; }
   </style>
+  <meta name="theme-color" content="#03101f">
 </head>
 <body>
 
@@ -58,7 +133,7 @@
   <input type="number" id="betAmount" value="5" min="1" />
   <br /><br />
   <button class="primary" onclick="startGame()">Play</button>
-  <button class="danger" onclick="cashOut()">Cash Out</button>
+  <button id="cashOutBtn" class="danger" onclick="cashOut()" disabled>Cash Out</button>
   <br /><br />
   <button onclick="deposit()">Deposit ZMW</button>
   <button onclick="withdraw()">Withdraw ZMW</button>
@@ -94,6 +169,7 @@ let running = false;
 let multiplier = 1;
 let interval;
 let crashPoint = 0;
+let currentBet = 0;
 
 const loginModal = document.getElementById("loginModal");
 const registerModal = document.getElementById("registerModal");
@@ -121,40 +197,90 @@ function updateUI() {
 updateUI();
 
 /* GAME LOGIC */
-function startGame() {
+async function startGame() {
   if (running) return;
+
   const betAmountEl = document.getElementById("betAmount");
   const bet = Number(betAmountEl.value);
   if (bet > balance) return alert("Insufficient balance");
 
+  // call backend
+  const res = await fetch(API + "/game/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" }
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    return alert(data.error || "Failed to start round");
+  }
+
+  // 🔑 SAVE ROUND ID
+  currentRoundId = data.roundId;
+
+  currentBet = bet;
   balance -= bet;
   updateUI();
 
   running = true;
+  document.getElementById("cashOutBtn").disabled = false;
   multiplier = 1;
-  crashPoint = (Math.random() * 4 + 1.2).toFixed(2);
 
   const planeEl = document.getElementById("plane");
 
   interval = setInterval(() => {
     multiplier += 0.01;
-    document.getElementById("multiplier").textContent = multiplier.toFixed(2) + "x";
-    planeEl.style.transform = `translate(${multiplier * 30}px, -${multiplier * 15}px)`;
+    document.getElementById("multiplier").textContent =
+      multiplier.toFixed(2) + "x";
 
-    if (multiplier >= crashPoint) {
-      endGame(false);
-    }
+    planeEl.style.transform =
+      `translate(${multiplier * 30}px, -${multiplier * 15}px)`;
   }, 50);
 }
+async function cashOut() {
+  if (!running || !currentRoundId) {
+    alert("No active round");
+    return;
+  }
 
-function cashOut() {
-  if (!running) return;
-  endGame(true);
+  running = false;
+  clearInterval(interval);
+  document.getElementById("cashOutBtn").disabled = true;
+
+  const res = await fetch(API + "/game/cashout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      roundId: currentRoundId,
+      betAmount: currentBet,
+      multiplier: multiplier
+    })
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    alert(data.error || "Cash out failed");
+    return;
+  }
+
+  if (data.win) {
+    balance += data.payout;
+    alert("You won ZMW " + data.payout.toFixed(2));
+  } else {
+    alert("Crashed!");
+  }
+
+  currentRoundId = null;
+  currentBet = 0;
+  updateUI();
 }
 
 function endGame(win) {
   clearInterval(interval);
   running = false;
+  document.getElementById("cashOutBtn").disabled = true;
 
   if (win) {
     const betAmountEl = document.getElementById("betAmount");
@@ -346,4 +472,4 @@ async function withdraw() {
 </script>
 
 </body>
-</html>
+      </html>
