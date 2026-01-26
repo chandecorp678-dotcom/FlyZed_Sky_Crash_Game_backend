@@ -2,7 +2,20 @@ const express = require("express");
 const router = express.Router();
 
 const { startRound, cashOut } = require("./gameEngine");
+// DEMO WALLET STORE (temporary)
+const wallets = new Map();
 
+// helper
+function getBalance(userId) {
+  if (!wallets.has(userId)) {
+    wallets.set(userId, 100); // demo starting balance
+  }
+  return wallets.get(userId);
+}
+
+function setBalance(userId, amount) {
+  wallets.set(userId, Number(amount));
+}
 // START ROUND
 router.post("/start", (req, res) => {
   try {
