@@ -18,14 +18,37 @@ function setBalance(userId, amount) {
 }
 // START ROUND
 router.post("/start", (req, res) => {
+  const { betAmount } = req.body;
+  const userId = req.user?.id || req.body.userId || "guest";
+
+  if (!betAmount || betAmount <= 0) {
+    return res.status(400).json({ error: "Invalid bet amount" });
+  }
+
+  const balance = getBalance(userId);
+
+  // 🔐 PREVENT PLAYING WITHOUT FUNDS
+  if (balance < betAmount) {
+    return res.status(400).json({ error: "Insufficient balance" });
+  }
+
+  // 🔐 DEBIT WALLET (ONCE)
+  setBalance(userId, balance - betAmount);
+
   try {
     const round = startRound();
-    res.json(round);
+
+    return res.json({
+      ...round,
+      balance: getBalance(userId)
+    });
+
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    // rollback safety
+    setBalance(userId, balance);
+    return res.status(400).json({ error: err.message });
   }
 });
-
 // CASH OUT
 router.post("/cashout", async (req, res) => {
   const { roundId, betAmount, multiplier } = req.body;
