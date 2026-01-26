@@ -22,13 +22,16 @@ function startRound() {
     .digest('hex');
 
   const round = {
-    roundId,
-    crashPoint,
-    serverSeed,
-    serverSeedHash,
-    status: 'running',
-    startedAt: Date.now(),
-    endedAt: null
+  roundId,
+  crashPoint,
+  serverSeed,
+  serverSeedHash,
+  status: 'running',
+  locked: false,      // 🔐 ADD THIS
+  playerId: null,     // 🔐 ADD THIS
+  startedAt: Date.now(),
+  endedAt: null
+};
   };
 
   rounds.set(roundId, round);
