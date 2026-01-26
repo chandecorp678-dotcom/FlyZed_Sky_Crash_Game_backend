@@ -14,18 +14,33 @@ router.post("/start", (req, res) => {
 });
 
 // CASH OUT
-router.post("/cashout", (req, res) => {
+router.post("/cashout", async (req, res) => {
+  const { roundId, betAmount, multiplier } = req.body;
+  const userId = req.user?.id || req.body.userId; // demo-safe
+
+  if (!roundId || !betAmount || !multiplier) {
+    return res.status(400).json({ error: "Missing parameters" });
+  }
+
   try {
-    const { roundId, betAmount, multiplier } = req.body;
+    // 🔐 Game-level lock already handled in gameEngine
+    const result = cashOut(
+      roundId,
+      betAmount,
+      multiplier,
+      userId
+    );
 
-    if (!roundId || !betAmount || !multiplier) {
-      return res.status(400).json({ error: "Missing parameters" });
-    }
+    return res.json({
+      success: true,
+      ...result
+    });
 
-    const result = cashOut(roundId, betAmount, multiplier);
-    res.json(result);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    return res.status(400).json({
+      success: false,
+      error: err.message
+    });
   }
 });
 
