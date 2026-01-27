@@ -41,13 +41,13 @@ function startRound() {
   // ⏱️ AUTO-CRASH TIMER (SERVER SIDE)
   const delay = crashDelayFromPoint(crashPoint);
 
-  setTimeout(() => {
-    if (round.status === 'running') {
-      round.status = 'crashed';
-      round.locked = true;
-      round.endedAt = Date.now();
-    }
-  }, delay);
+  round.timer = setTimeout(() => {
+  if (round.status === 'running') {
+    round.status = 'crashed';
+    round.locked = true;
+    round.endedAt = Date.now();
+  }
+}, delay);
 
   // IMPORTANT: never return crashPoint
   return {
@@ -55,7 +55,7 @@ function startRound() {
     serverSeedHash,
     startedAt: round.startedAt
   };
-    }
+}
 
 /**
  * Attempt to cash out a round.
