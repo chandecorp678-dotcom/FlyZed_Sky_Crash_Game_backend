@@ -80,6 +80,9 @@ function cashOut(roundId, betAmount, cashoutMultiplier, playerId) {
 
   // If player cashes out AFTER crash → loss
   if (cashoutMultiplier >= round.crashPoint) {
+   if (round.timer) {
+  clearTimeout(round.timer);
+   }
     round.status = 'crashed';
     round.locked = true;
     round.endedAt = Date.now();
@@ -88,7 +91,9 @@ function cashOut(roundId, betAmount, cashoutMultiplier, playerId) {
 
   // Player cashed out before crash → win
   const payout = computePayout(betAmount, cashoutMultiplier);
-
+  if (round.timer) {
+  clearTimeout(round.timer);
+  }
   round.status = 'cashed_out';
   round.locked = true;
   round.endedAt = Date.now();
