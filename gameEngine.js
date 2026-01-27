@@ -22,20 +22,31 @@ function startRound() {
     .digest('hex');
 
   const round = {
-  roundId,
-  crashPoint,
-  serverSeed,
-  serverSeedHash,
-  status: 'running',
-  locked: false,      // 🔐 ADD THIS
-  playerId: null,     // 🔐 ADD THIS
-  startedAt: Date.now(),
-  endedAt: null
-};
+    roundId,
+    crashPoint,
+    serverSeed,
+    serverSeedHash,
+    status: 'running',
+    locked: false,
+    playerId: null,
+    startedAt: Date.now(),
+    endedAt: null,
+    timer: null
+  };
+
+  // ⏱️ AUTO-CRASH TIMER
+  const crashDelayMs = Math.floor((crashPoint - 1) * 1000);
+
+  round.timer = setTimeout(() => {
+    if (!round.locked) {
+      round.status = 'crashed';
+      round.locked = true;
+      round.endedAt = Date.now();
+    }
+  }, crashDelayMs);
 
   rounds.set(roundId, round);
 
-  // IMPORTANT: never return crashPoint
   return {
     roundId,
     serverSeedHash,
