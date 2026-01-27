@@ -1,11 +1,22 @@
+'use strict';
+
 const express = require("express");
 const router = express.Router();
 
-const { startRound, cashOut } = require("./gameEngine");
-// DEMO WALLET STORE (temporary)
+const {
+  startRound,
+  cashOut,
+  getRoundStatus
+} = require("./gameEngine");
+
+/**
+ * DEMO WALLET STORE (TEMPORARY)
+ * Later this will be DB-backed
+ */
 const wallets = new Map();
 
-// helper
+/* ---------------- WALLET HELPERS ---------------- */
+
 function getBalance(userId) {
   if (!wallets.has(userId)) {
     wallets.set(userId, 100); // demo starting balance
@@ -16,7 +27,9 @@ function getBalance(userId) {
 function setBalance(userId, amount) {
   wallets.set(userId, Number(amount));
 }
-// START ROUND
+
+/* ---------------- START ROUND ---------------- */
+
 router.post("/start", (req, res) => {
   const { betAmount } = req.body;
   const userId = req.user?.id || req.body.userId || "guest";
@@ -27,12 +40,12 @@ router.post("/start", (req, res) => {
 
   const balance = getBalance(userId);
 
-  // 🔐 PREVENT PLAYING WITHOUT FUNDS
+  // 🔐 Prevent playing without funds
   if (balance < betAmount) {
     return res.status(400).json({ error: "Insufficient balance" });
   }
 
-  // 🔐 DEBIT WALLET (ONCE)
+  // 🔐 Debit wallet ONCE at round start
   setBalance(userId, balance - betAmount);
 
   try {
@@ -49,55 +62,37 @@ router.post("/start", (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 });
-// CHECK ROUND STATUS
-router.get("/status/:roundId", (req, res) => {
-  try {
-    const { roundId } = req.params;
-    const status = getRoundStatus(roundId);
-    res.json(status);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-// CASH OUT
-router.post("/cashout", async (req, res) => {
+
+/* ---------------- CASH OUT ---------------- */
+
+router.post("/cashout", (req, res) => {
   const { roundId, betAmount, multiplier } = req.body;
-  const userId = req.user?.id || req.body.userId; // demo-safe
+  const userId = req.user?.id || req.body.userId || "guest";
 
   if (!roundId || !betAmount || !multiplier) {
     return res.status(400).json({ error: "Missing parameters" });
   }
 
   try {
-    // 🔐 Game-level lock already handled in gameEngine
     const result = cashOut(
-  roundId,
-  betAmount,
-  multiplier,
-  userId
-);
+      roundId,
+      betAmount,
+      multiplier,
+      userId
+    );
 
-// 🔐 CREDIT WALLET ONLY ON WIN
-if (result.win) {
-  const currentBalance = getBalance(userId);
-  setBalance(userId, currentBalance + result.payout);
-}
+    // 🔐 Credit wallet ONLY on win
+    if (result.win) {
+      const currentBalance = getBalance(userId);
+      setBalance(userId, currentBalance + result.payout);
+    }
 
-return res.json({
-  success: true,
-  ...result,
-  balance: getBalance(userId)
-});
-// CHECK ROUND STATUS
-router.get("/status/:roundId", (req, res) => {
-  try {
-    const { roundId } = req.params;
-    const status = getRoundStatus(roundId);
-    res.json(status);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
+    return res.json({
+      success: true,
+      ...result,
+      balance: getBalance(userId)
+    });
+
   } catch (err) {
     return res.status(400).json({
       success: false,
@@ -106,4 +101,20 @@ router.get("/status/:roundId", (req, res) => {
   }
 });
 
-module.exports = router;
+/* ---------------- ROUND STATUS ---------------- */
+/**
+ * Used by frontend to know if the round has crashed
+ */
+router.get("/status/:roundId", (req, res) => {
+  try {
+    const { roundId } = req.params;
+    const status = getRoundStatus(roundId);
+    res.json(status);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/* ---------------- EXPORT ---------------- */
+
+module.exports = router; 
