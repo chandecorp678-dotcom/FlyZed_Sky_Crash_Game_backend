@@ -62,8 +62,11 @@ router.post("/start", (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 });
-const { getRoundStatus } = require("./gameEngine");
 
+/* ---------------- ROUND STATUS ---------------- */
+/**
+ * Frontend polls this to know if round has crashed
+ */
 router.get("/status/:roundId", (req, res) => {
   try {
     const status = getRoundStatus(req.params.roundId);
@@ -72,6 +75,7 @@ router.get("/status/:roundId", (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
+
 /* ---------------- CASH OUT ---------------- */
 
 router.post("/cashout", (req, res) => {
@@ -110,20 +114,6 @@ router.post("/cashout", (req, res) => {
   }
 });
 
-/* ---------------- ROUND STATUS ---------------- */
-/**
- * Used by frontend to know if the round has crashed
- */
-router.get("/status/:roundId", (req, res) => {
-  try {
-    const { roundId } = req.params;
-    const status = getRoundStatus(roundId);
-    res.json(status);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
 /* ---------------- EXPORT ---------------- */
 
-module.exports = router; 
+module.exports = router;
