@@ -170,7 +170,26 @@ let multiplier = 1;
 let interval;
 let crashPoint = 0;
 let currentBet = 0;
+let currentRoundId = null;
+let statusPoller = null;
+function handleCrashFromServer() {
+  if (!running) return;
 
+  running = false;
+  clearInterval(interval);
+  clearInterval(statusPoller);
+
+  document.getElementById("cashOutBtn").disabled = true;
+
+  alert("💥 CRASHED");
+
+  currentRoundId = null;
+  currentBet = 0;
+
+  document.getElementById("plane").style.transform = "translate(0,0)";
+  document.getElementById("multiplier").textContent = "1.00x";
+}
+  
 const loginModal = document.getElementById("loginModal");
 const registerModal = document.getElementById("registerModal");
 const loginBtn = document.getElementById("loginBtn");
@@ -220,10 +239,21 @@ async function startGame() {
 
   currentRoundId = data.roundId;
   currentBet = bet;
-  balance -= bet;
-  updateUI();
 
   running = true;
+  // 🔁 Start backend crash polling
+statusPoller = setInterval(async () => {
+  try {
+    const res = await fetch(`${API}/game/status/${currentRoundId}`);
+    const data = await res.json();
+
+    if (data.status === "crashed") {
+      handleCrashFromServer();
+    }
+  } catch (err) {
+    console.error("Status poll error", err);
+  }
+}, 300);
   document.getElementById("cashOutBtn").disabled = false;
   multiplier = 1;
 
@@ -243,8 +273,8 @@ async function cashOut() {
     alert("No active round");
     return;
   }
-
   running = false;
+  clearInterval(statusPoller);
   clearInterval(interval);
   document.getElementById("cashOutBtn").disabled = true;
 
@@ -274,23 +304,8 @@ async function cashOut() {
 
   currentRoundId = null;
   currentBet = 0;
-  updateUI();
-}
-
-function endGame(win) {
-  clearInterval(interval);
-  running = false;
-  document.getElementById("cashOutBtn").disabled = true;
-
-  if (win) {
-    const betAmountEl = document.getElementById("betAmount");
-    const winAmount = Number(betAmountEl.value) * multiplier;
-    balance += winAmount;
-  }
-
-  multiplier = 1;
-  document.getElementById("plane").style.transform = "translate(0,0)";
-  document.getElementById("multiplier").textContent = "1.00x";
+  clearInterval(statusPoller);
+statusPoller = null;
   updateUI();
 }
 
@@ -472,4 +487,4 @@ async function withdraw() {
 </script>
 
 </body>
-  </html>
+      </html>
