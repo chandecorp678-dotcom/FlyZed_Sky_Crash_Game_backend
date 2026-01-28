@@ -143,4 +143,4 @@ module.exports = {
   startRound,
   cashOut,
   getRoundStatus
-}; 
+};
