@@ -6,23 +6,29 @@ const crypto = require('crypto');
  * Later this moves to DB or Redis.
  */
 const rounds = new Map();
+
+/* ---------------- ROUND STATUS ---------------- */
+
 function getRoundStatus(roundId) {
   const round = rounds.get(roundId);
-  if (!round) throw new Error("Round not found");
+
+  if (!round) {
+    return { status: 'invalid' };
+  }
 
   return {
     status: round.status,
     endedAt: round.endedAt
   };
 }
+
+/* ---------------- ROUND CREATION ---------------- */
+
 function crashDelayFromPoint(crashPoint) {
   // Converts multiplier into milliseconds (server-only)
   return Math.floor((crashPoint - 1) * 1000);
 }
-/**
- * Create a new game round.
- * The crash point is generated and KEPT SERVER-SIDE.
- */
+
 function startRound() {
   const roundId = crypto.randomUUID();
 
@@ -42,23 +48,24 @@ function startRound() {
     locked: false,
     playerId: null,
     startedAt: Date.now(),
-    endedAt: null
+    endedAt: null,
+    timer: null
   };
 
   rounds.set(roundId, round);
 
-  // ⏱️ AUTO-CRASH TIMER (SERVER SIDE)
+  // ⏱️ AUTO-CRASH (SERVER AUTHORITATIVE)
   const delay = crashDelayFromPoint(crashPoint);
 
   round.timer = setTimeout(() => {
-  if (round.status === 'running') {
-    round.status = 'crashed';
-    round.locked = true;
-    round.endedAt = Date.now();
-  }
-}, delay);
+    if (round.status === 'running') {
+      round.status = 'crashed';
+      round.locked = true;
+      round.endedAt = Date.now();
+    }
+  }, delay);
 
-  // IMPORTANT: never return crashPoint
+  // IMPORTANT: never expose crashPoint
   return {
     roundId,
     serverSeedHash,
@@ -66,17 +73,15 @@ function startRound() {
   };
 }
 
-/**
- * Attempt to cash out a round.
- * Backend decides if the player won or lost.
- */
+/* ---------------- CASH OUT ---------------- */
+
 function cashOut(roundId, betAmount, cashoutMultiplier, playerId) {
   const round = rounds.get(roundId);
   if (!round) {
     throw new Error('Invalid round');
   }
 
-  // 🔐 WALLET LOCK: block double payouts
+  // 🔐 Prevent double settlement
   if (round.locked) {
     throw new Error('Wallet already settled');
   }
@@ -90,22 +95,23 @@ function cashOut(roundId, betAmount, cashoutMultiplier, playerId) {
     throw new Error('Unauthorized cashout');
   }
 
-  // If player cashes out AFTER crash → loss
+  // Clear auto-crash timer
+  if (round.timer) {
+    clearTimeout(round.timer);
+    round.timer = null;
+  }
+
+  // AFTER crash → loss
   if (cashoutMultiplier >= round.crashPoint) {
-   if (round.timer) {
-  clearTimeout(round.timer);
-   }
     round.status = 'crashed';
     round.locked = true;
     round.endedAt = Date.now();
     return { win: false, payout: 0 };
   }
 
-  // Player cashed out before crash → win
+  // BEFORE crash → win
   const payout = computePayout(betAmount, cashoutMultiplier);
-  if (round.timer) {
-  clearTimeout(round.timer);
-  }
+
   round.status = 'cashed_out';
   round.locked = true;
   round.endedAt = Date.now();
@@ -115,20 +121,9 @@ function cashOut(roundId, betAmount, cashoutMultiplier, playerId) {
     payout
   };
 }
-function getRoundStatus(roundId) {
-  const round = rounds.get(roundId);
 
-  if (!round) {
-    return { status: 'invalid' };
-  }
+/* ---------------- INTERNALS ---------------- */
 
-  return {
-    status: round.status
-  };
-}
-/**
- * Internal crash generator (loss-biased).
- */
 function generateCrashPoint() {
   const r = Math.random();
   if (r < 0.7) {
@@ -138,9 +133,6 @@ function generateCrashPoint() {
   }
 }
 
-/**
- * Payout calculator.
- */
 function computePayout(betAmount, multiplier) {
   const b = Number(betAmount) || 0;
   const m = Number(multiplier) || 0;
@@ -151,4 +143,4 @@ module.exports = {
   startRound,
   cashOut,
   getRoundStatus
-};
+}; 
