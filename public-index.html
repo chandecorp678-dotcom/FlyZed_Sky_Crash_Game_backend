@@ -309,6 +309,23 @@ statusPoller = setInterval(async () => {
 }, 100);
 }
 async function cashOut() {
+  // 🔐 STAGE 2.5 SAFETY LATCH — verify round still alive
+  try {
+    const statusRes = await fetch(
+      `${API}/game/status/${currentRoundId}?userId=${user.guest ? "guest" : user.id}`
+    );
+    const statusData = await statusRes.json();
+
+    if (statusData.status === "crashed") {
+      handleCrashFromServer();
+      return;
+    }
+  } catch (err) {
+    console.warn("Safety latch status check failed", err);
+    // Fail-safe: do NOT allow cashOut if status is unknown
+    alert("Round status unclear. Please wait.");
+    return;
+  }
   // 🚫 No active round
   if (!running || !currentRoundId) {
     alert("No active round");
