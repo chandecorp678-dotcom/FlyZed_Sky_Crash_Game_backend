@@ -205,6 +205,7 @@ function handleCrashFromServer() {
   if (!running) return;
 
   running = false;
+  roundCrashed = true;
   clearInterval(interval);
   clearInterval(statusPoller);
 
@@ -276,6 +277,7 @@ if (data.balance !== undefined) {
 
 currentRoundId = data.roundId;
 currentBet = bet;
+roundCrashed = false;
 running = true;
 
 updateUI();
@@ -284,7 +286,8 @@ statusPoller = setInterval(async () => {
   try {
     const res = await fetch(`${API}/game/status/${currentRoundId}?userId=guest`);
     const data = await res.json();
-
+    
+										if (!running) = return;
     if (data.status === "crashed") {
       handleCrashFromServer();
     }
@@ -310,6 +313,11 @@ statusPoller = setInterval(async () => {
 }, 100);
 }
 async function cashOut() {
+  if (roundCrashed) {
+   alert("Too late — round already 
+    crashed");
+  return;
+  }
   // 🔐 STAGE 2.5 SAFETY LATCH — verify round still alive
   try {
     const statusRes = await fetch(
@@ -581,4 +589,4 @@ async function withdraw() {
 </script>
 
 </body>
-  </html>
+	</html> 
