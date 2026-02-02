@@ -7,6 +7,20 @@ const crypto = require('crypto');
  */
 const rounds = new Map();
 
+/* ---------------- INTERNAL HELPERS ---------------- */
+
+function computeMultiplier(startedAt) {
+  const elapsedMs = Date.now() - startedAt;
+  const growthPerSecond = 1; // linear growth for now
+  const multiplier = 1 + (elapsedMs / 1000) * growthPerSecond;
+  return Number(multiplier.toFixed(2));
+}
+
+function crashDelayFromPoint(crashPoint) {
+  // Converts multiplier into milliseconds (server-only)
+  return Math.floor((crashPoint - 1) * 1000);
+}
+
 /* ---------------- ROUND STATUS ---------------- */
 
 function getRoundStatus(roundId) {
@@ -39,17 +53,6 @@ function getRoundStatus(roundId) {
 
 /* ---------------- ROUND CREATION ---------------- */
 
-function crashDelayFromPoint(crashPoint) {
-  function computeMultiplier(startedAt) {
-  const elapsedMs = Date.now() - startedAt;
-  const growthPerSecond = 1; // 1x per second (linear for now)
-  const multiplier = 1 + (elapsedMs / 1000) * growthPerSecond;
-  return Number(multiplier.toFixed(2));
-  }
-  // Converts multiplier into milliseconds (server-only)
-  return Math.floor((crashPoint - 1) * 1000);
-}
-
 function startRound() {
   const roundId = crypto.randomUUID();
 
@@ -68,7 +71,7 @@ function startRound() {
     status: 'running',
     locked: false,
     playerId: null,
-    startedAt: Date.now(),
+    startedAt: Date.now(), // ✅ SERVER TIME
     endedAt: null,
     timer: null
   };
@@ -122,10 +125,10 @@ function cashOut(roundId, betAmount, _ignoredMultiplier, playerId) {
     round.timer = null;
   }
 
-  // AFTER crash → loss
   const serverMultiplier = computeMultiplier(round.startedAt);
 
-if (serverMultiplier >= round.crashPoint) {
+  // AFTER crash → loss
+  if (serverMultiplier >= round.crashPoint) {
     round.status = 'crashed';
     round.locked = true;
     round.endedAt = Date.now();
@@ -133,7 +136,7 @@ if (serverMultiplier >= round.crashPoint) {
   }
 
   // BEFORE crash → win
-  const payout = computePayout(betAmount, cashoutMultiplier);
+  const payout = computePayout(betAmount, serverMultiplier);
 
   round.status = 'cashed_out';
   round.locked = true;
