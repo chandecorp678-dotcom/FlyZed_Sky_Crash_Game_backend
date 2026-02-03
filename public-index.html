@@ -194,17 +194,28 @@ const API = "https://ka-ndeke-backend-5dgy.onrender.com/api"; // backend base
 let user = { guest: true };
 let balance = Number(localStorage.getItem("guest_balance") || 10);
 let running = false;
+let multiplier = 1;        // FIX: declare multiplier
+let interval = null;       // FIX: declare interval (prevent ReferenceError)
 let currentBet = 0;
 let roundCrashed = false;
 let currentRoundId = null;
 let statusPoller = null;
+
 function handleCrashFromServer() {
   if (!running) return;
 
   running = false;
   roundCrashed = true;
-  clearInterval(interval);
-  clearInterval(statusPoller);
+
+  // FIX: clear interval & poller safely
+  if (interval) {
+    clearInterval(interval);
+    interval = null;
+  }
+  if (statusPoller) {
+    clearInterval(statusPoller);
+    statusPoller = null;
+  }
 
   document.getElementById("cashOutBtn").disabled = true;
 
@@ -244,6 +255,12 @@ updateUI();
 
 /* GAME LOGIC */
 async function startGame() {
+  // FIX 5: prevent double polling
+  if (statusPoller) {
+    clearInterval(statusPoller);
+    statusPoller = null;
+  }
+
   if (running) return;
 
   const bet = Number(document.getElementById("betAmount").value);
@@ -277,14 +294,22 @@ currentBet = bet;
 roundCrashed = false;
 running = true;
 
+// FIX 2: enable Cash Out when round starts
+document.getElementById("cashOutBtn").disabled = false;
+
+// FIX 4: reset multiplier & plane at round start (before polling)
+multiplier = 1;
+document.getElementById("multiplier").textContent = "1.00x";
+document.getElementById("plane").style.transform = "translate(0,0)";
+
 updateUI();
   // 🔁 Start backend crash polling
 statusPoller = setInterval(async () => {
   try {
-    const res = await fetch(`${API}/game/status/$
-	{currentRoundId}?userId=${user.guest ?
-	"guest" : user.id}`
-	);
+    // FIX 1: correct single-line template literal fetch
+    const res = await fetch(
+      `${API}/game/status/${currentRoundId}?userId=${user.guest ? "guest" : user.id}`
+    );
     const data = await res.json();
 
     if (!running) return;
@@ -351,6 +376,7 @@ async function cashOut() {
     interval = null;
   }
 
+  // FIX 3: clear poller safely
   if (statusPoller) {
     clearInterval(statusPoller);
     statusPoller = null;
@@ -591,4 +617,4 @@ async function withdraw() {
 </script>
 
 </body>
-	</html> 
+		</html>
