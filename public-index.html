@@ -195,7 +195,6 @@ let user = { guest: true };
 let balance = Number(localStorage.getItem("guest_balance") || 10);
 let running = false;
 let multiplier = 1;        // FIX: declare multiplier
-let interval = null;       // FIX: declare interval (prevent ReferenceError)
 let currentBet = 0;
 let roundCrashed = false;
 let currentRoundId = null;
@@ -208,10 +207,6 @@ function handleCrashFromServer() {
   roundCrashed = true;
 
   // FIX: clear interval & poller safely
-  if (interval) {
-    clearInterval(interval);
-    interval = null;
-  }
   if (statusPoller) {
     clearInterval(statusPoller);
     statusPoller = null;
@@ -331,13 +326,7 @@ statusPoller = setInterval(async () => {
   } catch (err) {
     console.error("Status poll error", err);
   }
-}, 120);
-  if (data.status === "running" && data.multiplier) {
-  document.getElementById("cashOutBtn").disabled = false;
-}
-  multiplier = 1;
-
-  const planeEl = document.getElementById("plane");
+}, 200);
 
 }
 async function cashOut() {
@@ -370,11 +359,6 @@ async function cashOut() {
 
   // 🛑 HARD STOP — this stops the plane instantly
   running = false;
-
-  if (interval) {
-    clearInterval(interval);
-    interval = null;
-  }
 
   // FIX 3: clear poller safely
   if (statusPoller) {
@@ -617,4 +601,4 @@ async function withdraw() {
 </script>
 
 </body>
-		</html>
+	  </html>
