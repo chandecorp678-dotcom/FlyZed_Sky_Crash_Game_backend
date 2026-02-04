@@ -20,13 +20,8 @@ router.post("/start", (req, res) => {
   }
 
   try {
-    const round = startRound();
-
-    return res.json({
-      ...round,
-      balance: getBalance(userId)
-    });
-
+    const data = joinRound(userId, betAmount);
+    return res.json(data);
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
@@ -36,9 +31,9 @@ router.post("/start", (req, res) => {
 /**
  * Frontend polls this to know if round has crashed
  */
-router.get("/status/:roundId", (req, res) => {
+router.get("/status", (req, res) => {
   try {
-    const status = getRoundStatus(req.params.roundId);
+    const status = getRoundStatus();
     res.json(status);
   } catch (err) {
     res.status(400).json({ error: err.message });
