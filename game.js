@@ -43,7 +43,6 @@ router.get("/status", (req, res) => {
 /* ---------------- CASH OUT ---------------- */
 
 router.post("/cashout", (req, res) => {
-  const { roundId, betAmount, multiplier } = req.body;
   const userId = req.user?.id || req.body.userId || "guest";
 
   if (!roundId || !betAmount || !multiplier) {
