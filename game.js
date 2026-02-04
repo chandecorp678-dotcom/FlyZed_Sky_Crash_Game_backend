@@ -42,7 +42,7 @@ router.get("/status", (req, res) => {
 
 /* ---------------- CASH OUT ---------------- */
 
-rrouter.post("/cashout", (req, res) => {
+router.post("/cashout", (req, res) => {
   const userId = req.user?.id || req.body.userId || "guest";
 
   try {
