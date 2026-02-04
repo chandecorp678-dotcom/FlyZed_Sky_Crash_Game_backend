@@ -1,154 +1,27 @@
 'use strict';
 const crypto = require('crypto');
 
-/**
- * In-memory round store (OK for now).
- * Later this moves to DB or Redis.
- */
-const rounds = new Map();
+/* =========================================================
+   GLOBAL ROUND STATE
+========================================================= */
 
-/* ---------------- INTERNAL HELPERS ---------------- */
+let activeRound = null;
+let roundPlayers = new Map(); // playerId -> { betAmount, cashedOut }
+
+/* =========================================================
+   INTERNAL HELPERS
+========================================================= */
 
 function computeMultiplier(startedAt) {
   const elapsedMs = Date.now() - startedAt;
-  const growthPerSecond = 1; // linear growth for now
+  const growthPerSecond = 1;
   const multiplier = 1 + (elapsedMs / 1000) * growthPerSecond;
   return Number(multiplier.toFixed(2));
 }
 
 function crashDelayFromPoint(crashPoint) {
-  // Converts multiplier into milliseconds (server-only)
   return Math.floor((crashPoint - 1) * 1000);
 }
-
-/* ---------------- ROUND STATUS ---------------- */
-
-function getRoundStatus(roundId) {
-  const round = rounds.get(roundId);
-
-  if (!round) {
-    return { status: 'invalid' };
-  }
-
-  let multiplier = null;
-
-  if (round.status === 'running') {
-    multiplier = computeMultiplier(round.startedAt);
-
-    // Force crash if multiplier passes crashPoint
-    if (multiplier >= round.crashPoint) {
-      round.status = 'crashed';
-      round.locked = true;
-      round.endedAt = Date.now();
-      multiplier = round.crashPoint;
-    }
-  }
-
-  return {
-    status: round.status,
-    multiplier,
-    endedAt: round.endedAt
-  };
-}
-
-/* ---------------- ROUND CREATION ---------------- */
-
-function startRound() {
-  const roundId = crypto.randomUUID();
-
-  const crashPoint = generateCrashPoint();
-  const serverSeed = crypto.randomBytes(32).toString('hex');
-  const serverSeedHash = crypto
-    .createHash('sha256')
-    .update(serverSeed)
-    .digest('hex');
-
-  const round = {
-    roundId,
-    crashPoint,
-    serverSeed,
-    serverSeedHash,
-    status: 'running',
-    locked: false,
-    playerId: null,
-    startedAt: Date.now(), // ✅ SERVER TIME
-    endedAt: null,
-    timer: null
-  };
-
-  rounds.set(roundId, round);
-
-  // ⏱️ AUTO-CRASH (SERVER AUTHORITATIVE)
-  const delay = crashDelayFromPoint(crashPoint);
-
-  round.timer = setTimeout(() => {
-    if (round.status === 'running') {
-      round.status = 'crashed';
-      round.locked = true;
-      round.endedAt = Date.now();
-    }
-  }, delay);
-
-  // IMPORTANT: never expose crashPoint
-  return {
-    roundId,
-    serverSeedHash,
-    startedAt: round.startedAt
-  };
-}
-
-/* ---------------- CASH OUT ---------------- */
-
-function cashOut(roundId, betAmount, _ignoredMultiplier, playerId) {
-  const round = rounds.get(roundId);
-  if (!round) {
-    throw new Error('Invalid round');
-  }
-
-  // 🔐 Prevent double settlement
-  if (round.locked) {
-    throw new Error('Wallet already settled');
-  }
-
-  // 🔐 Bind round to first player
-  if (!round.playerId) {
-    round.playerId = playerId;
-  }
-
-  if (round.playerId !== playerId) {
-    throw new Error('Unauthorized cashout');
-  }
-
-  // Clear auto-crash timer
-  if (round.timer) {
-    clearTimeout(round.timer);
-    round.timer = null;
-  }
-
-  const serverMultiplier = computeMultiplier(round.startedAt);
-
-  // AFTER crash → loss
-  if (serverMultiplier >= round.crashPoint) {
-    round.status = 'crashed';
-    round.locked = true;
-    round.endedAt = Date.now();
-    return { win: false, payout: 0 };
-  }
-
-  // BEFORE crash → win
-  const payout = computePayout(betAmount, serverMultiplier);
-
-  round.status = 'cashed_out';
-  round.locked = true;
-  round.endedAt = Date.now();
-
-  return {
-    win: true,
-    payout
-  };
-}
-
-/* ---------------- INTERNALS ---------------- */
 
 function generateCrashPoint() {
   const r = Math.random();
@@ -160,13 +33,140 @@ function generateCrashPoint() {
 }
 
 function computePayout(betAmount, multiplier) {
-  const b = Number(betAmount) || 0;
-  const m = Number(multiplier) || 0;
-  return Number((b * m).toFixed(2));
+  return Number((Number(betAmount) * Number(multiplier)).toFixed(2));
 }
 
+/* =========================================================
+   ROUND LIFECYCLE
+========================================================= */
+
+function startNewRound() {
+  const roundId = crypto.randomUUID();
+  const crashPoint = generateCrashPoint();
+  const serverSeed = crypto.randomBytes(32).toString('hex');
+  const serverSeedHash = crypto
+    .createHash('sha256')
+    .update(serverSeed)
+    .digest('hex');
+
+  activeRound = {
+    roundId,
+    crashPoint,
+    serverSeed,
+    serverSeedHash,
+    status: 'running',
+    startedAt: Date.now(),
+    endedAt: null,
+    timer: null
+  };
+
+  roundPlayers.clear();
+
+  const delay = crashDelayFromPoint(crashPoint);
+
+  activeRound.timer = setTimeout(() => {
+    if (activeRound && activeRound.status === 'running') {
+      activeRound.status = 'crashed';
+      activeRound.endedAt = Date.now();
+
+      // 🔁 Start next round after 5 seconds
+      setTimeout(startNewRound, 5000);
+    }
+  }, delay);
+
+  console.log('🟢 New round started:', roundId);
+}
+
+/* Start the very first round on server boot */
+startNewRound();
+
+/* =========================================================
+   PUBLIC API
+========================================================= */
+
+function getRoundStatus() {
+  if (!activeRound) {
+    return { status: 'waiting' };
+  }
+
+  let multiplier = null;
+
+  if (activeRound.status === 'running') {
+    multiplier = computeMultiplier(activeRound.startedAt);
+
+    if (multiplier >= activeRound.crashPoint) {
+      activeRound.status = 'crashed';
+      activeRound.endedAt = Date.now();
+      multiplier = activeRound.crashPoint;
+    }
+  }
+
+  return {
+    roundId: activeRound.roundId,
+    status: activeRound.status,
+    multiplier,
+    endedAt: activeRound.endedAt
+  };
+}
+
+function joinRound(playerId, betAmount) {
+  if (!activeRound || activeRound.status !== 'running') {
+    throw new Error('No active round');
+  }
+
+  if (roundPlayers.has(playerId)) {
+    throw new Error('Player already joined this round');
+  }
+
+  roundPlayers.set(playerId, {
+    betAmount: Number(betAmount),
+    cashedOut: false
+  });
+
+  return {
+    roundId: activeRound.roundId,
+    serverSeedHash: activeRound.serverSeedHash,
+    startedAt: activeRound.startedAt
+  };
+}
+
+function cashOut(playerId) {
+  if (!activeRound) {
+    throw new Error('No active round');
+  }
+
+  const player = roundPlayers.get(playerId);
+  if (!player) {
+    throw new Error('Player not in round');
+  }
+
+  if (player.cashedOut) {
+    throw new Error('Already cashed out');
+  }
+
+  const multiplier = computeMultiplier(activeRound.startedAt);
+
+  if (multiplier >= activeRound.crashPoint || activeRound.status !== 'running') {
+    return { win: false, payout: 0 };
+  }
+
+  player.cashedOut = true;
+
+  const payout = computePayout(player.betAmount, multiplier);
+
+  return {
+    win: true,
+    payout,
+    multiplier
+  };
+}
+
+/* =========================================================
+   EXPORTS
+========================================================= */
+
 module.exports = {
-  startRound,
-  cashOut,
-  getRoundStatus
+  getRoundStatus,
+  joinRound,
+  cashOut
 };
