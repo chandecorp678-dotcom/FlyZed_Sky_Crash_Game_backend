@@ -1,16 +1,52 @@
 'use strict';
 const crypto = require('crypto');
 
-/* =========================================================
-   GLOBAL ROUND STATE
-========================================================= */
+/* ========================================================= GLOBAL ROUND STATE ========================================================= */
 
 let activeRound = null;
+let currentRound = null;
 let roundPlayers = new Map(); // playerId -> { betAmount, cashedOut }
 
-/* =========================================================
-   INTERNAL HELPERS
-========================================================= */
+/* ========================================================= INTERNAL HELPERS ========================================================= */
+
+function createNewRound() {
+  const roundId = crypto.randomUUID();
+
+  const crashPoint = generateCrashPoint();
+  const serverSeed = crypto.randomBytes(32).toString('hex');
+  const serverSeedHash = crypto
+    .createHash('sha256')
+    .update(serverSeed)
+    .digest('hex');
+
+  currentRound = {
+    roundId,
+    crashPoint,
+    serverSeed,
+    serverSeedHash,
+    status: 'running',
+    startedAt: Date.now(),
+    endedAt: null,
+    locked: false,
+    players: new Set(),
+    timer: null
+  };
+
+  // ⏱️ Auto-crash
+  const delay = crashDelayFromPoint(crashPoint);
+
+  currentRound.timer = setTimeout(() => {
+    if (currentRound && currentRound.status === 'running') {
+      currentRound.status = 'crashed';
+      currentRound.locked = true;
+      currentRound.endedAt = Date.now();
+    }
+  }, delay);
+
+  console.log('🛫 New global round started:', currentRound.roundId);
+
+  return currentRound;
+}
 
 function computeMultiplier(startedAt) {
   const elapsedMs = Date.now() - startedAt;
@@ -36,9 +72,7 @@ function computePayout(betAmount, multiplier) {
   return Number((Number(betAmount) * Number(multiplier)).toFixed(2));
 }
 
-/* =========================================================
-   ROUND LIFECYCLE
-========================================================= */
+/* ========================================================= ROUND LIFECYCLE ========================================================= */
 
 function startNewRound() {
   const roundId = crypto.randomUUID();
@@ -80,9 +114,7 @@ function startNewRound() {
 /* Start the very first round on server boot */
 startNewRound();
 
-/* =========================================================
-   PUBLIC API
-========================================================= */
+/* ========================================================= PUBLIC API ========================================================= */
 
 function getRoundStatus() {
   if (!activeRound) {
@@ -161,9 +193,7 @@ function cashOut(playerId) {
   };
 }
 
-/* =========================================================
-   EXPORTS
-========================================================= */
+/* ========================================================= EXPORTS ========================================================= */
 
 module.exports = {
   getRoundStatus,
