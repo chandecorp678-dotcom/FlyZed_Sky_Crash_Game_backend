@@ -203,8 +203,10 @@ function handleCrashFromServer() {
 
   running = false;
   roundCrashed = true;
-  clearInterval(interval);
-  clearInterval(statusPoller);
+  if (statusPoller) {
+    clearInterval(statusPoller);
+    statusPoller = null;
+  }
 
   document.getElementById("cashOutBtn").disabled = true;
 
@@ -375,11 +377,6 @@ async function cashOut() {
   // 🛑 HARD STOP — this stops the plane instantly
   running = false;
 
-  if (interval) {
-    clearInterval(interval);
-    interval = null;
-  }
-
   if (statusPoller) {
     clearInterval(statusPoller);
     statusPoller = null;
@@ -395,8 +392,6 @@ async function cashOut() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
- 							 roundId: currentRoundId,
-  							betAmount: currentBet,
   							userId: user.guest ? "guest" : 
    	user.id
 							})
@@ -620,4 +615,4 @@ async function withdraw() {
 </script>
 
 </body>
-	</html> 
+	</html>
