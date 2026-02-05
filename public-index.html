@@ -338,37 +338,7 @@ running = true;
 
 updateUI();
   // 🔁 Start backend crash polling
-statusPoller = setInterval(async () => {
-  try {
-    const res = await fetch(`${API}/game/status/$
-	{currentRoundId}?userId=${user.guest ?
-	"guest" : user.id}`
-	);
-    const data = await res.json();
 
-    if (!running) return;
-
-    if (data.status === "running" && data.multiplier) {
-      multiplier = data.multiplier;
-      document.getElementById("multiplier").textContent =
-        multiplier.toFixed(2) + "x";
-
-      const x = multiplier * 15;
-      const y = multiplier * -6;
-      document.getElementById("plane").style.transform =
-        `translate(${x}px, ${y}px)`;
-    }
-
-    if (data.status === "crashed") {
-      handleCrashFromServer();
-    }
-  } catch (err) {
-    console.error("Status poll error", err);
-  }
-}, 120);
-  if (data.status === "running" && data.multiplier) {
-  document.getElementById("cashOutBtn").disabled = false;
-}
   multiplier = 1;
 
   const planeEl = document.getElementById("plane");
