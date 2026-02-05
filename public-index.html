@@ -16,7 +16,7 @@
     .panel { padding: 10px; }
     .game-box { background: #12345a; margin: 10px; border-radius: 10px; padding: 10px; height: 260px; position: relative; overflow: hidden; }
     #multiplier { font-size: 26px; font-weight: bold; position: absolute; top: 10px; left: 10px; }
-    #plane { width: 80px; position: absolute; bottom: 20px; left: 10px; transition: transform 0.05s linear; }
+    #plane { width: 80px; position: absolute; bottom: 20px; left: 10px; transition: transform 0.08s linear; }
     input { padding: 8px; width: 120px; text-align: center; }
     .controls { margin-top: 10px; }
     .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 1000; }
@@ -179,12 +179,10 @@ function getBalance() {
 }
 
 if (typeof refreshBalance !== "function") {
-
   function refreshBalance() {
     // Placeholder no-op until real refreshBalance is available
     return;
   }
-
 }
 
 /* ============================================================= */
@@ -198,6 +196,22 @@ let currentBet = 0;
 let roundCrashed = false;
 let currentRoundId = null;
 let statusPoller = null;
+let spectatorPoller = null;
+
+// Helper to safely set multiplier and plane position
+function renderMultiplierAndPlane(mult) {
+  const m = Number(Number(mult || 1).toFixed(2));
+  const multEl = document.getElementById("multiplier");
+  const planeEl = document.getElementById("plane");
+  if (multEl) multEl.textContent = m.toFixed(2) + "x";
+  if (planeEl) {
+    const x = m * 15;
+    const y = m * -6;
+    planeEl.style.transform = `translate(${x}px, ${y}px)`;
+  }
+}
+
+// Called when server reports a crash for the current round
 function handleCrashFromServer() {
   if (!running) return;
 
@@ -215,10 +229,9 @@ function handleCrashFromServer() {
   currentRoundId = null;
   currentBet = 0;
 
-  document.getElementById("plane").style.transform = "translate(0,0)";
-  document.getElementById("multiplier").textContent = "1.00x";
+  renderMultiplierAndPlane(1);
 }
-  
+
 const loginModal = document.getElementById("loginModal");
 const registerModal = document.getElementById("registerModal");
 const loginBtn = document.getElementById("loginBtn");
@@ -244,12 +257,6 @@ function updateUI() {
 }
 updateUI();
 
-/* SPECTATOR POLLER — show running rounds immediately on page load
-   Insert this block immediately AFTER the line `updateUI();` and BEFORE the
-   `/* GAME LOGIC */` comment.
-*/
-let spectatorPoller = null;
-
 function stopSpectatorPoll() {
   if (spectatorPoller) {
     clearInterval(spectatorPoller);
@@ -257,53 +264,58 @@ function stopSpectatorPoll() {
   }
 }
 
+// Spectator poll: polls public round status and renders multiplier/plane.
+// Uses startedAt to locally compute a live multiplier between server updates.
 function startSpectatorPoll(intervalMs = 200) {
-  // don't start twice
   if (spectatorPoller) return;
 
   spectatorPoller = setInterval(async () => {
     try {
-      // If user has joined a round locally (running === true), stop spectator polling
-      // — the in-page player logic will take over UI updates.
-      if (typeof running !== 'undefined' && running) {
+      // If a player has joined a round (running === true), stop spectator polling
+      if (running) {
         stopSpectatorPoll();
         return;
       }
 
-      const res = await fetch(`${API}/game/status?userId=${user && user.guest ? 'guest' : (user && user.id ? user.id : 'guest')}`);
-      const data = await res.json().catch(() => ({}));
+      const res = await fetch(`${API}/game/status`);
+      if (!res.ok) {
+        // Keep the UI in spectator mode even if server returns non-OK
+        return;
+      }
+      const data = await res.json().catch(() => null);
       if (!data) return;
 
-      // Use server multiplier if provided (fallback to 1)
-      const mult = Number(data.multiplier ?? 1);
-      document.getElementById('multiplier').textContent = mult.toFixed(2) + 'x';
-
-      // Update plane position visually (tweak scale if you want)
-      const x = mult * 15;
-      const y = mult * -6;
-      document.getElementById('plane').style.transform = `translate(${x}px, ${y}px)`;
-
-      // Keep Cash Out disabled for spectators (they haven't joined)
-      document.getElementById('cashOutBtn').disabled = true;
-
-      // If server says crashed, show crash state briefly (UI reset handled elsewhere)
-      if (data.status === 'crashed') {
-        // ensure multiplier shows exact crash point
-        document.getElementById('multiplier').textContent = Number(data.multiplier ?? data.crashPoint ?? 1).toFixed(2) + 'x';
-        // optionally flash an alert or animate crash — we keep it simple
+      // If server provides startedAt, compute local live multiplier (linear model as server uses)
+      let liveMult = 1;
+      if (data.startedAt) {
+        const elapsedMs = Date.now() - Number(data.startedAt);
+        liveMult = 1 + (elapsedMs / 1000) * 1; // growthPerSecond = 1 (matches server)
+      } else if (data.multiplier) {
+        liveMult = Number(data.multiplier);
       }
+
+      // If server indicates crashed, show exact crash point and return
+      if (data.status === "crashed") {
+        renderMultiplierAndPlane(data.multiplier ?? data.crashPoint ?? 1);
+        // no alert for spectators; keep polling to catch next round
+        return;
+      }
+
+      // Render interpolated multiplier for smooth spectator animation
+      renderMultiplierAndPlane(liveMult);
     } catch (err) {
-      console.error('spectator poll error', err);
-      // keep polling; transient network errors are normal
+      // transient errors shouldn't stop the poller
+      console.error("spectator poll error", err);
     }
   }, intervalMs);
 }
 
-// Start spectator polling as soon as script runs / page loads
-// (This will be a no-op if you start the game and 'running' becomes true.)
+// Start spectator polling as soon as script runs
 startSpectatorPoll();
 
 /* GAME LOGIC */
+
+// Start a round as a player: tell the server you joined (server is authoritative)
 async function startGame() {
   if (running) return;
 
@@ -313,119 +325,145 @@ async function startGame() {
     return alert("Invalid bet amount");
   }
 
-  const res = await fetch(API + "/game/start", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-  betAmount: bet,
-  userId: user.guest ? "guest" : user.id
-  })
-});
+  try {
+    const res = await fetch(API + "/game/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        betAmount: bet,
+        userId: user.guest ? "guest" : user.id
+      })
+    });
 
-  const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return alert(data.error || "Failed to start round");
+    }
 
-if (!res.ok) {
-  return alert(data.error || "Failed to start round");
+    // sync balance if server provided it
+    if (data.balance !== undefined) {
+      balance = Number(data.balance);
+      updateUI();
+    }
+
+    currentRoundId = data.roundId;
+    currentBet = bet;
+    roundCrashed = false;
+    running = true;
+    updateUI();
+
+    // Start player poller which drives plane and enables cash-out.
+    // Use the public status endpoint (server is authoritative).
+    if (statusPoller) {
+      clearInterval(statusPoller);
+      statusPoller = null;
+    }
+
+    statusPoller = setInterval(async () => {
+      try {
+        const res = await fetch(`${API}/game/status`);
+        if (!res.ok) return;
+        const d = await res.json().catch(() => null);
+        if (!d) return;
+
+        // compute live multiplier using startedAt if available
+        let liveMult = 1;
+        if (d.startedAt) {
+          const elapsedMs = Date.now() - Number(d.startedAt);
+          liveMult = 1 + (elapsedMs / 1000) * 1;
+        } else if (d.multiplier) {
+          liveMult = Number(d.multiplier);
+        }
+
+        if (!running) return;
+
+        if (d.status === "running") {
+          renderMultiplierAndPlane(liveMult);
+          document.getElementById("cashOutBtn").disabled = false;
+        } else if (d.status === "crashed") {
+          // Ensure exact crash point shown then handle crash
+          renderMultiplierAndPlane(d.multiplier ?? d.crashPoint ?? 1);
+          handleCrashFromServer();
+        }
+      } catch (err) {
+        console.error("player poll error", err);
+      }
+    }, 120);
+
+  } catch (err) {
+    console.error("startGame error", err);
+    alert("Failed to start round: " + (err.message || err));
+  }
 }
 
-// 🔐 SYNC BALANCE FROM SERVER
-if (data.balance !== undefined) {
-  balance = Number(data.balance);
-}
-
-currentRoundId = data.roundId;
-currentBet = bet;
-roundCrashed = false;
-running = true;
-
-updateUI();
-  // 🔁 Start backend crash polling
-
-  multiplier = 1;
-
-  const planeEl = document.getElementById("plane");
-
-}
 async function cashOut() {
   if (roundCrashed) {
-   alert("Too late — round already crashed");
-  return;
+    alert("Too late — round already crashed");
+    return;
   }
-  // 🔐 STAGE 2.5 SAFETY LATCH — verify round still alive
-  try {
-    const statusRes = await fetch(
-      `${API}/game/status/${currentRoundId}?userId=${user.guest ? "guest" : user.id}`
-    );
-    const statusData = await statusRes.json();
 
+  // safety check: ask server for current status
+  try {
+    const statusRes = await fetch(`${API}/game/status`);
+    const statusData = await statusRes.json().catch(() => ({}));
     if (statusData.status === "crashed") {
       handleCrashFromServer();
       return;
     }
   } catch (err) {
     console.warn("Safety latch status check failed", err);
-    // Fail-safe: do NOT allow cashOut if status is unknown
     alert("Round status unclear. Please wait.");
     return;
   }
-  // 🚫 No active round
-  if (!running || !currentRoundId) {
+
+  if (!running) {
     alert("No active round");
     return;
   }
 
-  // 🛑 HARD STOP — this stops the plane instantly
+  // hard stop: stop player poller
   running = false;
-
   if (statusPoller) {
     clearInterval(statusPoller);
     statusPoller = null;
   }
 
-  // 🔒 Prevent double cashout
+  // prevent double cashout
   document.getElementById("cashOutBtn").disabled = true;
-
-  let data;
 
   try {
     const res = await fetch(API + "/game/cashout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-  							userId: user.guest ? "guest" : 
-   	user.id
-							})
-});
+      body: JSON.stringify({
+        userId: user.guest ? "guest" : user.id
+      })
+    });
 
-    data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Cash out failed");
 
-    if (!res.ok) {
-      throw new Error(data.error || "Cash out failed");
+    // sync balance if provided
+    if (data.balance !== undefined) {
+      balance = Number(data.balance);
+      updateUI();
+    }
+
+    if (data.win) {
+      alert("You won ZMW " + Number(data.payout).toFixed(2));
+    } else {
+      alert("Crashed!");
     }
   } catch (err) {
-    alert(err.message);
+    alert(err.message || "Cash out failed");
     return;
   }
 
-  // 💰 RESULT
-  if (data.balance !== undefined) {
-  balance = Number(data.balance);
-}
-
-if (data.win) {
-  alert("You won ZMW " + data.payout.toFixed(2));
-} else {
-    alert("Crashed!");
-  }
-
-  // 🔁 FULL RESET
+  // full reset of local player state
   currentRoundId = null;
   currentBet = 0;
-
-  multiplier = 1;
-  document.getElementById("multiplier").textContent = "1.00x";
-  document.getElementById("plane").style.transform = "translate(0,0)";
-
+  roundCrashed = false;
+  renderMultiplierAndPlane(1);
   updateUI();
 }
 
@@ -443,12 +481,9 @@ async function refreshBalance() {
   const headers = { "Content-Type": "application/json", "Authorization": "Bearer " + token };
 
   try {
-    // call the correct endpoint that exists on the backend
     const res = await fetch(API + "/users/me", { headers });
     const data = await res.json().catch(() => ({}));
-    console.log("refreshBalance response", res.status, data);
     if (res.ok) {
-      // response is a sanitized user object in users.js, so use data.balance
       balance = Number(data.balance ?? balance);
       user = data || user;
       updateUI();
@@ -507,7 +542,6 @@ async function register() {
 function logout() {
   user = { guest: true };
 
-  // restore stored guest balance or default
   const stored = localStorage.getItem("guest_balance");
   balance = stored !== null ? Number(stored) : 10;
 
@@ -531,38 +565,33 @@ async function deposit() {
   if (!amt || isNaN(amt) || amt <= 0) return alert("Invalid amount");
 
   if (user.guest) {
-  balance += Number(amt);
-  localStorage.setItem("guest_balance", balance);
-  updateUI();
-  alert("Deposit succeeded");
-  return;
-}
+    balance += Number(amt);
+    localStorage.setItem("guest_balance", balance);
+    updateUI();
+    alert("Deposit succeeded");
+    return;
+  }
 
   const token = localStorage.getItem("token");
   if (!token) return alert("You must be logged in to deposit");
 
   try {
-    const res = await fetch(API + "/users/deposit", { // <-- fixed endpoint
+    const res = await fetch(API + "/users/deposit", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
       body: JSON.stringify({ amount: Number(amt) })
     });
 
     const data = await res.json().catch(() => ({}));
-    console.log("deposit response", res.status, data);
-
     if (!res.ok) {
-      // show server message if available
       return alert(data.error || data.message || `Deposit failed (HTTP ${res.status})`);
     }
 
-    // server returns sanitized user object — read balance directly
     if (data.balance !== undefined) {
       balance = Number(data.balance);
       user = data;
       updateUI();
     } else {
-      // fallback: explicitly refresh
       await refreshBalance();
     }
     alert("Deposit succeeded");
@@ -588,15 +617,13 @@ async function withdraw() {
   if (!token) return alert("You must be logged in to withdraw");
 
   try {
-    const res = await fetch(API + "/users/withdraw", { // <-- fixed endpoint
+    const res = await fetch(API + "/users/withdraw", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
       body: JSON.stringify({ amount: Number(amt) })
     });
 
     const data = await res.json().catch(() => ({}));
-    console.log("withdraw response", res.status, data);
-
     if (!res.ok) return alert(data.error || data.message || `Withdraw failed (HTTP ${res.status})`);
 
     if (data.balance !== undefined) {
@@ -615,4 +642,4 @@ async function withdraw() {
 </script>
 
 </body>
-	</html>
+</html>
