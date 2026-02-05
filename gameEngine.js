@@ -1,5 +1,6 @@
 'use strict';
 const crypto = require('crypto');
+const logger = require('./logger');
 
 /* ========================================================= GLOBAL ROUND STATE =========================================================
    We implement ONE global round (currentRound). This file provides the core engine:
@@ -53,11 +54,11 @@ function markRoundCrashed(round, reason = 'auto') {
 
   // Clear any auto-crash timer (should be the one that caused this)
   if (round.timer) {
-    clearTimeout(round.timer);
+    try { clearTimeout(round.timer); } catch (e) {}
     round.timer = null;
   }
 
-  console.log('💥 Round crashed:', round.roundId, 'reason=', reason);
+  logger.info('game.round.crashed', { roundId: round.roundId, reason, crashPoint: round.crashPoint });
 
   // Schedule next round start after 5 seconds (avoid double-scheduling)
   if (!round.nextRoundTimer) {
@@ -124,7 +125,7 @@ function createNewRound() {
     }
   }, delay);
 
-  console.log('🛫 New global round started:', currentRound.roundId, 'crashPoint=', currentRound.crashPoint, 'delayMs=', delay);
+  logger.info('game.round.started', { roundId: currentRound.roundId, crashPoint: currentRound.crashPoint, startedAt: currentRound.startedAt, serverSeedHash });
 
   return currentRound;
 }
@@ -241,13 +242,61 @@ function cashOut(playerId) {
   player.cashedAt = Date.now();
   player.cashedMultiplier = multiplier;
 
-  console.log('💸 Player cashed out:', playerId, 'round=', currentRound.roundId, 'multiplier=', multiplier, 'payout=', payout);
+  logger.info('game.player.cashed', { playerId, roundId: currentRound.roundId, multiplier, payout });
 
   return {
     win: true,
     payout,
     multiplier
   };
+}
+
+/* ========================================================= DISPOSE / SHUTDOWN ========================================================= */
+
+/**
+ * dispose()
+ * Clear timers and round state for graceful shutdown. Safe to call multiple times.
+ */
+async function dispose() {
+  try {
+    if (!currentRound) {
+      logger.info('game.dispose.no_current_round');
+      return;
+    }
+
+    try {
+      if (currentRound.timer) {
+        clearTimeout(currentRound.timer);
+        currentRound.timer = null;
+      }
+      if (currentRound.nextRoundTimer) {
+        clearTimeout(currentRound.nextRoundTimer);
+        currentRound.nextRoundTimer = null;
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // Clear players map to free memory
+    try {
+      if (currentRound.players && typeof currentRound.players.clear === 'function') {
+        currentRound.players.clear();
+      }
+    } catch (e) {}
+
+    // Remove sensitive serverSeed from memory
+    try {
+      if (currentRound.serverSeed) {
+        currentRound.serverSeed = null;
+      }
+    } catch (e) {}
+
+    logger.info('game.dispose.completed', { roundId: currentRound.roundId });
+
+    currentRound = null;
+  } catch (err) {
+    logger.error('game.dispose.error', { message: err && err.message ? err.message : String(err) });
+  }
 }
 
 /* ========================================================= BOOT: auto-start first round ========================================================= */
@@ -261,6 +310,6 @@ module.exports = {
   getRoundStatus,
   joinRound,
   cashOut,
-  // expose createNewRound only for admin/testing if needed, but routes should NOT call it in normal operation:
-  // createNewRound
+  dispose
+  // createNewRound intentionally not exported for normal operation
 };
