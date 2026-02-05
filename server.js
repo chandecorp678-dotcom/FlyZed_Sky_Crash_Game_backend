@@ -3,14 +3,16 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 
+const logger = require("./logger");
+
 const { initDb, pool } = require("./db");
 const routes = require("./routes");
 
 const app = express();
 
-// Basic request logging to help debugging
+// Basic request logging to help debugging (uses structured logger)
 app.use((req, res, next) => {
-  console.log(new Date().toISOString(), req.method, req.originalUrl);
+  logger.info('http.request.start', { method: req.method, url: req.originalUrl, ip: req.ip });
   next();
 });
 
@@ -20,7 +22,10 @@ app.use(express.json());
 // Serve static frontend from ./public
 app.use(express.static(path.join(__dirname, "public")));
 
-(async () => {
+let serverInstance = null;
+let isShuttingDown = false;
+
+async function start() {
   try {
     await initDb();       // test Postgres connection
     app.locals.db = pool; // attach Postgres pool to app
@@ -29,11 +34,23 @@ app.use(express.static(path.join(__dirname, "public")));
     app.use("/api", routes);
 
     const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-      console.log("Ka Ndeke backend running on port", PORT);
+    serverInstance = app.listen(PORT, () => {
+      logger.info("server.started", { port: PORT });
     });
+
+    // Graceful shutdown on signals will be added in Step B (we wire the handlers there)
   } catch (err) {
-    console.error("Failed to start server:", err);
-    process.exit(1);      // <-- only here, inside catch
+    logger.error("Failed to start server", { message: err && err.message ? err.message : String(err) });
+    // Ensure non-zero exit when start fails
+    process.exit(1);
   }
-})();
+}
+
+start();
+
+// Export app and server for tests or later shutdown
+module.exports = {
+  app,
+  serverInstance,
+  _internal: { setShuttingDown: (val) => { isShuttingDown = !!val; } }
+};
