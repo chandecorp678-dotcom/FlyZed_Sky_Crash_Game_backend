@@ -8,7 +8,7 @@ const { sendError, sendSuccess, wrapAsync } = require("./apiResponses");
 
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret"; // secure secret in Render env
 
-// ----------------- Helper -----------------
+// ----------------- Helper ----------------- //
 function sanitizeUser(row) {
   if (!row) return null;
   return {
@@ -22,22 +22,22 @@ function sanitizeUser(row) {
   };
 }
 
-// ... (health and game helpers unchanged) ...
+// ... (health and game helpers unchanged) ... //
 
-// ----------------- Auth middleware (unchanged) -----------------
+// ----------------- Auth middleware (unchanged) ----------------- //
 
-// ----------------- User routes -----------------
+// ----------------- User routes ----------------- //
 router.get("/users/me", requireAuth, (req, res) => {
   return res.json(req.user);
-});
+}
 
-// Extracted handler for changing balance — now atomic update to avoid race conditions
+// Extracted handler for changing balance — now atomic update to avoid race conditions //
 const changeBalanceHandler = wrapAsync(async (req, res) => {
   const db = req.app.locals.db;
   const delta = Number(req.body?.delta);
   if (isNaN(delta)) return sendError(res, 400, "delta must be a number");
 
-  // Perform atomic update: ensure balance never goes negative and return the new row
+  // Perform atomic update: ensure balance never goes negative and return the new row //
   try {
     const rowRes = await db.query(
       `UPDATE users
@@ -58,10 +58,10 @@ const changeBalanceHandler = wrapAsync(async (req, res) => {
   }
 });
 
-// Route uses the extracted handler
+// Route uses the extracted handler //
 router.post("/users/balance/change", requireAuth, express.json(), changeBalanceHandler);
 
-// Deposit route
+// Deposit route //
 router.post("/users/deposit", requireAuth, express.json(), wrapAsync(async (req, res) => {
   const amount = Number(req.body?.amount);
   if (isNaN(amount) || amount <= 0) return sendError(res, 400, "amount must be > 0");
@@ -70,7 +70,7 @@ router.post("/users/deposit", requireAuth, express.json(), wrapAsync(async (req,
   return changeBalanceHandler(req, res);
 }));
 
-// Withdraw route
+// Withdraw route //
 router.post("/users/withdraw", requireAuth, express.json(), wrapAsync(async (req, res) => {
   const amount = Number(req.body?.amount);
   if (isNaN(amount) || amount <= 0) return sendError(res, 400, "amount must be > 0");
