@@ -1,203 +1,279 @@
-require("dotenv").config();
+'use strict';
+
 const express = require("express");
-const cors = require("cors");
-const path = require("path");
-
+const router = express.Router();
+const crypto = require("crypto");
 const logger = require("./logger");
-const { initDb, pool } = require("./db");
-const routes = require("./routes");
-const gameEngine = require("./gameEngine");
-const { sendError } = require("./apiResponses");
+const { runTransaction } = require("./dbHelper");
 
-const app = express();
+const {
+  joinRound,
+  cashOut: engineCashOut,
+  getRoundStatus
+} = require("./gameEngine");
 
-let serverInstance = null;
-let isShuttingDown = false;
-const GRACEFUL_TIMEOUT = Number(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS || 30000);
-const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 15000);
+// Use JSON body parsing for POST endpoints
+const json = express.json();
 
-// Basic request logging to help debugging (uses structured logger)
-app.use((req, res, next) => {
-  logger.info('http.request.start', { method: req.method, url: req.originalUrl, ip: req.ip });
-  next();
-});
+// Simple in-memory rate limiter for cashout per user (short window)
+// Now bounded and periodically pruned to prevent unbounded memory growth
+const cashoutTimestamps = new Map();
+const CASHOUT_MIN_INTERVAL_MS = Number(process.env.CASHOUT_MIN_INTERVAL_MS || 1000); // default 1s
+const CASHOUT_PRUNE_AGE_MS = Number(process.env.CASHOUT_PRUNE_AGE_MS || 1000 * 60 * 10); // 10min age
+const MAX_CASHOUT_ENTRIES = Number(process.env.MAX_CASHOUT_ENTRIES || 20000);
+const CASHOUT_PRUNE_INTERVAL_MS = Number(process.env.CASHOUT_PRUNE_INTERVAL_MS || 1000 * 60 * 5); // prune every 5 minutes
 
-app.use(cors());
-app.use(express.json());
-
-// Per-request timeout middleware (installed early)
-app.use((req, res, next) => {
-  const timeoutMs = REQUEST_TIMEOUT_MS;
-  let finished = false;
-
-  const timer = setTimeout(() => {
-    if (finished) return;
-    finished = true;
-    // log the timed-out request
-    try {
-      logger.warn('http.request.timeout', { method: req.method, url: req.originalUrl, timeoutMs });
-    } catch (e) {}
-    if (!res.headersSent) {
-      // Use sendError structure for a clean response
-      try {
-        return sendError(res, 503, "Request timeout");
-      } catch (e) {
-        try { res.status(503).send("Request timeout"); } catch (e2) {}
-      }
+function pruneCashoutMapByAge() {
+  const now = Date.now();
+  for (const [key, ts] of cashoutTimestamps) {
+    if (now - ts > CASHOUT_PRUNE_AGE_MS) {
+      cashoutTimestamps.delete(key);
     }
-    // Destroy the incoming request socket to free resources
-    try { req.destroy(); } catch (e) {}
-  }, timeoutMs);
+  }
+  // Enforce max size by deleting oldest entries
+  while (cashoutTimestamps.size > MAX_CASHOUT_ENTRIES) {
+    const firstKey = cashoutTimestamps.keys().next().value;
+    if (!firstKey) break;
+    cashoutTimestamps.delete(firstKey);
+  }
+}
 
-  function cleanup() {
-    if (!timer) return;
-    clearTimeout(timer);
-    finished = true;
+// Periodic prune (unref so it won't keep process alive)
+const pruneInterval = setInterval(() => {
+  try { pruneCashoutMapByAge(); } catch (e) { logger.warn('game.cashout.prune_failed', { message: e && e.message ? e.message : String(e) }); }
+}, CASHOUT_PRUNE_INTERVAL_MS);
+if (typeof pruneInterval.unref === 'function') pruneInterval.unref();
+
+/* ---------------- START ROUND (place bet and join global round) ---------------- */
+router.post("/start", json, async (req, res) => {
+  const db = req.app.locals.db;
+  if (!db) {
+    logger.error("game/start: DB not initialized");
+    return res.status(500).json({ error: "Database not initialized" });
   }
 
-  res.on('finish', cleanup);
-  res.on('close', cleanup);
-  req.on('aborted', cleanup);
-
-  // proceed to next middleware/route
-  next();
-});
-
-// Serve static frontend from ./public
-app.use(express.static(path.join(__dirname, "public")));
-
-// mount API routes under /api
-app.use("/api", routes);
-
-// Global error handler (must be registered AFTER routes)
-app.use((err, req, res, next) => {
-  if (res.headersSent) {
-    logger.warn('api.error.headers_already_sent', { error: err && err.message ? err.message : String(err) });
-    return next(err);
+  // Require authenticated user for real-money bet
+  const user = req.user;
+  if (!user || user.guest) {
+    return res.status(401).json({ error: "You must be logged in to place a bet" });
   }
 
-  const status = (err && err.status && Number(err.status)) ? Number(err.status) : (err && err.httpStatus) ? Number(err.httpStatus) : 500;
-  let message = (err && err.publicMessage) ? err.publicMessage : (err && err.message) ? err.message : 'Server error';
-  if (status >= 500 && process.env.NODE_ENV === 'production') {
-    message = 'Server error';
+  const betAmount = Number(req.body?.betAmount);
+  if (!betAmount || isNaN(betAmount) || betAmount <= 0) {
+    return res.status(400).json({ error: "Invalid bet amount" });
   }
 
-  logger.error('api.error.unhandled', { status, message, stack: err && err.stack ? err.stack : undefined });
+  // Ensure there's an active running round
+  const status = getRoundStatus();
+  if (!status || status.status !== "running") {
+    return res.status(400).json({ error: "No active running round" });
+  }
 
-  return sendError(res, status, message, err && (err.detail || err.stack || err.message));
-});
-
-async function start() {
   try {
-    await initDb();       // test Postgres connection
-    app.locals.db = pool; // attach Postgres pool to app
+    // Use runTransaction to handle BEGIN/COMMIT/ROLLBACK + release
+    const txResult = await runTransaction(db, async (client) => {
+      // Atomically deduct funds if sufficient
+      const updateRes = await client.query(
+        `UPDATE users
+         SET balance = balance - $1, updatedat = NOW()
+         WHERE id = $2 AND balance >= $1
+         RETURNING balance`,
+         [betAmount, user.id]
+      );
 
-    const PORT = process.env.PORT || 3000;
-    serverInstance = app.listen(PORT, () => {
-      logger.info("server.started", { port: PORT, request_timeout_ms: REQUEST_TIMEOUT_MS });
+      if (!updateRes.rowCount) {
+        // Throw to trigger rollback
+        const err = new Error('Insufficient funds');
+        err.status = 402;
+        throw err;
+      }
+
+      // create bet record
+      const betId = crypto.randomUUID();
+      await client.query(
+        `INSERT INTO bets (id, round_id, user_id, bet_amount, status, createdat, updatedat)
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+         [betId, status.roundId, user.id, betAmount, "active"]
+      );
+
+      return { betId, balance: Number(updateRes.rows[0].balance) };
     });
 
-  } catch (err) {
-    logger.error("server.start.failed", { message: err && err.message ? err.message : String(err) });
-    process.exit(1);
-  }
-}
-
-start();
-
-// Graceful shutdown routine
-async function gracefulShutdown(reason = "signal") {
-  if (isShuttingDown) {
-    logger.warn("shutdown.already_in_progress", { reason });
-    return;
-  }
-  isShuttingDown = true;
-  logger.info("shutdown.start", { reason });
-
-  const forceExitTimeout = setTimeout(() => {
-    logger.error("shutdown.force_exit", { timeoutMs: GRACEFUL_TIMEOUT });
+    // After commit, join the in-memory round (engine). If join fails, refund using a safe transaction.
     try {
-      if (logger._internal && logger._internal.fileStream) {
-        try { logger._internal.fileStream.end(); } catch (e) {}
+      const engineResp = joinRound(user.id, betAmount);
+      return res.json({ betId: txResult.betId, roundId: engineResp.roundId, serverSeedHash: engineResp.serverSeedHash, startedAt: engineResp.startedAt, balance: txResult.balance });
+    } catch (err) {
+      logger.error("joinRound error after DB changes", { message: err && err.message ? err.message : String(err) });
+      // refund the bet
+      try {
+        await runTransaction(db, async (client) => {
+          await client.query(
+            `UPDATE users SET balance = balance + $1, updatedat = NOW() WHERE id = $2`,
+            [betAmount, user.id]
+          );
+          await client.query(
+            `UPDATE bets SET status = 'refunded', updatedat = NOW() WHERE id = $1`,
+            [txResult.betId]
+          );
+        });
+      } catch (e2) {
+        logger.error("Failed to refund after joinRound failure", { message: e2 && e2.message ? e2.message : String(e2) });
       }
-    } catch (e) {}
-    process.exit(1);
-  }, GRACEFUL_TIMEOUT).unref();
+      return res.status(500).json({ error: "Failed to join round" });
+    }
+  } catch (err) {
+    if (err && err.status === 402) {
+      return res.status(402).json({ error: "Insufficient funds" });
+    }
+    logger.error("game/start transaction error", { message: err && err.message ? err.message : String(err) });
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* ---------------- ROUND STATUS ---------------- */
+/**
+ * Frontend polls this to know if round has crashed
+ */
+router.get("/status", (req, res) => {
+  try {
+    const status = getRoundStatus();
+
+    // Defensive normalization: if startedAt looks like seconds (10 digits), convert to ms
+    if (status && status.startedAt) {
+      const startedAtNum = Number(status.startedAt);
+      if (startedAtNum && startedAtNum < 1e12) {
+        status.startedAt = startedAtNum * 1000;
+      } else {
+        status.startedAt = startedAtNum;
+      }
+    }
+
+    return res.json(status);
+  } catch (err) {
+    logger.error("game/status error", { message: err && err.message ? err.message : String(err) });
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* ---------------- CASH OUT ---------------- */
+router.post("/cashout", json, async (req, res) => {
+  const db = req.app.locals.db;
+  if (!db) {
+    logger.error("game/cashout: DB not initialized");
+    return res.status(500).json({ error: "Database not initialized" });
+  }
+
+  const user = req.user;
+  if (!user || user.guest) {
+    return res.status(401).json({ error: "You must be logged in to cash out" });
+  }
+
+  // Rate-limit quick repeated cashouts
+  const last = cashoutTimestamps.get(user.id) || 0;
+  if (Date.now() - last < CASHOUT_MIN_INTERVAL_MS) {
+    // record attempt for telemetry then return
+    cashoutTimestamps.set(user.id, Date.now());
+    pruneCashoutMapByAge();
+    return res.status(429).json({ error: "Too many cashout attempts; slow down" });
+  }
+  // mark attempt time (prevents tiny race loops)
+  cashoutTimestamps.set(user.id, Date.now());
+  pruneCashoutMapByAge();
 
   try {
-    if (serverInstance && serverInstance.close) {
-      logger.info("shutdown.http.stop_listening");
-      await new Promise((resolve) => serverInstance.close(() => resolve()));
-      logger.info("shutdown.http.closed");
-    } else {
-      logger.warn("shutdown.http.no_server_instance");
-    }
+    // Entire cashout flow happens inside a DB transaction to keep consistent
+    const result = await runTransaction(db, async (client) => {
+      const betRes = await client.query(
+        `SELECT id, round_id, user_id, bet_amount, status
+         FROM bets
+         WHERE user_id = $1 AND status = 'active' AND round_id = $2
+         FOR UPDATE`,
+         [user.id, getRoundStatus().roundId]
+      );
 
-    try {
-      if (gameEngine && typeof gameEngine.dispose === "function") {
-        logger.info("shutdown.gameEngine.dispose_start");
-        await gameEngine.dispose();
-        logger.info("shutdown.gameEngine.disposed");
-      } else {
-        logger.warn("shutdown.gameEngine.no_dispose");
+      if (!betRes.rowCount) {
+        const e = new Error('No active bet found for current round');
+        e.status = 400;
+        throw e;
       }
-    } catch (e) {
-      logger.error("shutdown.gameEngine.dispose_error", { message: e && e.message ? e.message : String(e) });
-    }
 
-    try {
-      if (pool && typeof pool.end === "function") {
-        logger.info("shutdown.db.pool_ending");
-        await pool.end();
-        logger.info("shutdown.db.closed");
-      } else {
-        logger.warn("shutdown.db.no_pool");
+      const bet = betRes.rows[0];
+
+      // Call engine to compute payout / mark cashed
+      let engineResult;
+      try {
+        engineResult = engineCashOut(user.id);
+      } catch (err) {
+        logger.error("Engine cashOut error", { message: err && err.message ? err.message : String(err) });
+        const e = new Error('Server error during cashout');
+        e.status = 500;
+        throw e;
       }
-    } catch (e) {
-      logger.error("shutdown.db.close_error", { message: e && e.message ? e.message : String(e) });
-    }
 
-    try {
-      if (logger._internal && logger._internal.fileStream) {
-        logger.info("shutdown.logger.flush_close");
-        logger._internal.fileStream.end();
+      if (!engineResult.win) {
+        await client.query(
+          `UPDATE bets SET status = 'lost', payout = $1, updatedat = NOW() WHERE id = $2`,
+          [0, bet.id]
+        );
+        return { success: false, payout: 0, multiplier: engineResult.multiplier, balance: null };
       }
-    } catch (e) {}
 
-    clearTimeout(forceExitTimeout);
-    logger.info("shutdown.complete");
-    process.exit(0);
+      const payout = Number(engineResult.payout);
+      const updateUser = await client.query(
+        `UPDATE users SET balance = balance + $1, updatedat = NOW() WHERE id = $2 RETURNING balance`,
+        [payout, user.id]
+      );
+
+      if (!updateUser.rowCount) {
+        const e = new Error('Failed to credit user');
+        e.status = 500;
+        throw e;
+      }
+
+      await client.query(
+        `UPDATE bets SET status = 'cashed', payout = $1, updatedat = NOW() WHERE id = $2`,
+        [payout, bet.id]
+      );
+
+      return { success: true, payout, multiplier: engineResult.multiplier, balance: Number(updateUser.rows[0].balance) };
+    });
+
+    // update rate limiter to now (already set)
+    cashoutTimestamps.set(user.id, Date.now());
+    pruneCashoutMapByAge();
+
+    if (!result.success) {
+      return res.json({ success: false, payout: 0, multiplier: result.multiplier });
+    }
+    return res.json({ success: true, payout: result.payout, multiplier: result.multiplier, balance: result.balance });
   } catch (err) {
-    logger.error("shutdown.unhandled_error", { message: err && err.message ? err.message : String(err) });
-    clearTimeout(forceExitTimeout);
-    process.exit(1);
+    if (err && err.status === 400) return res.status(400).json({ error: err.message });
+    if (err && err.status === 402) return res.status(402).json({ error: err.message });
+    logger.error("game/cashout transaction error", { message: err && err.message ? err.message : String(err) });
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* ================= CLEANUP EXPORTS ================= */
+
+/**
+ * cleanup()
+ * Clear module-level timers/intervals so shutdown is clean. Safe to call multiple times.
+ */
+function cleanup() {
+  try {
+    if (typeof pruneInterval !== 'undefined' && pruneInterval) {
+      clearInterval(pruneInterval);
+    }
+    // Also clear the in-memory map to free memory
+    try { cashoutTimestamps.clear(); } catch (e) {}
+    logger.info('game.routes.cleanup_completed');
+  } catch (e) {
+    logger.warn('game.routes.cleanup_failed', { message: e && e.message ? e.message : String(e) });
   }
 }
 
-// Signal handlers
-process.on("SIGTERM", () => {
-  logger.info("signal.received", { signal: "SIGTERM" });
-  gracefulShutdown("SIGTERM");
-});
-process.on("SIGINT", () => {
-  logger.info("signal.received", { signal: "SIGINT" });
-  gracefulShutdown("SIGINT");
-});
-
-// Uncaught exceptions / unhandled rejections
-process.on("uncaughtException", (err) => {
-  logger.error("uncaughtException", { message: err && err.message ? err.message : String(err), stack: err && err.stack ? err.stack : undefined });
-  gracefulShutdown("uncaughtException");
-});
-
-process.on("unhandledRejection", (reason) => {
-  logger.error("unhandledRejection", { reason: reason && reason.message ? reason.message : String(reason) });
-  gracefulShutdown("unhandledRejection");
-});
-
-// Export app and server for tests or later shutdown
-module.exports = {
-  app,
-  serverInstance,
-  _internal: { setShuttingDown: (val) => { isShuttingDown = !!val; } }
-};
+// Export router and cleanup helper
+module.exports = router;
+module.exports.cleanup = cleanup;
