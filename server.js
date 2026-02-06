@@ -255,25 +255,4 @@ router.post("/cashout", json, async (req, res) => {
   }
 });
 
-/* ================= CLEANUP EXPORTS ================= */
-
-/**
- * cleanup()
- * Clear module-level timers/intervals so shutdown is clean. Safe to call multiple times.
- */
-function cleanup() {
-  try {
-    if (typeof pruneInterval !== 'undefined' && pruneInterval) {
-      clearInterval(pruneInterval);
-    }
-    // Also clear the in-memory map to free memory
-    try { cashoutTimestamps.clear(); } catch (e) {}
-    logger.info('game.routes.cleanup_completed');
-  } catch (e) {
-    logger.warn('game.routes.cleanup_failed', { message: e && e.message ? e.message : String(e) });
-  }
-}
-
-// Export router and cleanup helper
 module.exports = router;
-module.exports.cleanup = cleanup;
