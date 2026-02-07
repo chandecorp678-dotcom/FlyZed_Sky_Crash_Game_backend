@@ -1,62 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Ka Ndeke – Aviator</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#03101f">
-
+  <meta charset="utf-8" />
+  <title>Ka Ndeke – Aviator (Full UI + Realtime)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#03101f" />
   <style>
-    /* Base layout */
     :root{
-      --bg:#081a2b;
-      --panel:#0c223a;
-      --accent:#FFD700;
-      --muted:rgba(255,255,255,0.72);
-      --white:#ffffff;
-      --danger:#d7263d;
-      --control-height:48px;
-      --gap:10px;
+      --bg:#081a2b; --panel:#0c223a; --accent:#FFD700; --muted:rgba(255,255,255,0.72);
+      --white:#ffffff; --danger:#d7263d; --control-height:48px; --gap:10px;
     }
-    html,body{height:100%;margin:0;padding:0;background:var(--bg);color:var(--white);-webkit-font-smoothing:antialiased;font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+    html,body{height:100%;margin:0;padding:0;background:var(--bg);color:var(--white);-webkit-font-smoothing:antialiased;font-family:Inter,system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
 
     /* Header */
-    header{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:8px;
-      padding:10px 12px;
-      background:#03101f;
-      position:sticky;
-      top:0;
-      z-index:30;
-      border-bottom:1px solid rgba(255,255,255,0.03);
-    }
+    header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:#03101f;position:sticky;top:0;z-index:30;border-bottom:1px solid rgba(255,255,255,0.03)}
     header h1{margin:0;font-size:18px;color:var(--accent);font-weight:700;display:flex;align-items:center;gap:8px}
     .header-right{display:flex;align-items:center;gap:8px}
 
     /* Panel & user info */
-    .panel{padding:10px 12px; text-align:left}
+    .panel{padding:10px 12px;text-align:left}
     #userInfo{font-size:14px;color:var(--muted)}
     #username{font-weight:700;color:var(--white)}
     #balance{color:var(--white);font-weight:600}
 
     /* Game area */
-    .game-box{
-      margin:12px;
-      border-radius:12px;
-      background:linear-gradient(180deg,#12345a,#0a2b46);
-      padding:10px;
-      min-height:220px;
-      position:relative;
-      overflow:hidden;
-      display:flex;
-      align-items:flex-start;
-      justify-content:flex-start;
-    }
+    .game-box{margin:12px;border-radius:12px;background:linear-gradient(180deg,#12345a,#0a2b46);padding:10px;min-height:260px;position:relative;overflow:hidden;display:flex;align-items:flex-start;justify-content:flex-start}
     #multiplier{font-size:28px;font-weight:800;color:var(--white);margin-left:8px}
-    #plane{width:72px;transition:transform 0.08s linear;will-change:transform}
+    #plane{width:80px;transition:transform 0.08s linear;will-change:transform}
 
     /* Controls */
     .controls{padding:12px;display:flex;flex-direction:column;gap:10px;align-items:center}
@@ -65,64 +35,57 @@
     button{cursor:pointer;border:none;border-radius:10px;padding:10px 14px;font-weight:700}
     .primary{background:var(--accent);color:#000;padding:12px 18px}
     .danger{background:var(--danger);color:#fff;padding:12px 18px}
+    .panel-small{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px}
 
-    /* Wallet buttons small */
+    /* Wallet */
     .wallet-row{display:flex;gap:10px;justify-content:center}
     .wallet-row button{background:#f0f0f0;color:#111;border-radius:8px;padding:10px 12px;font-weight:600}
 
-    /* Buttons full-width on small screens */
-    .controls .full{width:100%}
-
     /* Modals */
-    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);z-index:40;padding:12px}
-    .modal-content{width:100%;max-width:420px;background:var(--panel);border-radius:10px;padding:14px;color:var(--white);box-shadow:0 6px 18px rgba(0,0,0,0.5)}
-    .modal h3{margin-top:0;margin-bottom:8px}
-    .modal .flex{display:flex;gap:10px}
+    .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:none;align-items:center;justify-content:center;z-index:1000;padding:12px}
+    .modal-content{background:var(--panel);padding:18px;border-radius:10px;color:var(--white);width:100%;max-width:520px;max-height:90vh;overflow:auto}
+    .modal h3{margin-top:0}
+    .flex{display:flex;gap:8px;align-items:center;justify-content:center}
 
-    /* History list */
-    .history-list{max-height:58vh;overflow:auto}
-    .history-item{padding:8px;border-radius:8px;margin-bottom:8px;background:rgba(255,255,255,0.02);cursor:pointer;display:flex;justify-content:space-between;align-items:center}
-    .history-item .meta{font-size:12px;color:var(--muted)}
+    /* History */
+    .history-list{max-height:55vh;overflow:auto;text-align:left;margin-top:10px}
+    .history-item{padding:8px;border-radius:6px;margin-bottom:6px;background:rgba(255,255,255,0.02);cursor:pointer}
+    .small{font-size:12px;color:#cfe8ff}
+    .meta-row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .badge{padding:4px 8px;border-radius: 6px;background: rgba(255,255,255,0.06);font-size:12px}
+    #metrics{margin-left:12px;font-size:13px;color:#cfe8ff}
 
-    /* Responsive: small devices */
+    /* Responsive */
     @media (max-width:520px){
       #multiplier{font-size:22px}
-      #plane{width:56px}
+      #plane{width:64px}
       .game-box{min-height:180px;margin:10px;border-radius:10px;padding:8px}
       .controls{position:fixed;left:0;right:0;bottom:0;padding:12px;background:linear-gradient(180deg, rgba(8,26,43,0.2), var(--bg));border-top:1px solid rgba(255,255,255,0.03)}
-      .controls .row{flex-direction:row;align-items:center}
       input[type=number]{width:100%;flex:1}
       .controls .full{width:48%}
-      .wallet-row{flex-direction:row;gap:10px}
-      .modal-content{max-width:95%;padding:12px}
       .history-list{max-height:60vh}
     }
 
-    /* Accessibility focus styles */
+    /* Accessibility focus */
     button:focus, input:focus{outline:3px solid rgba(255,215,0,0.15);outline-offset:2px}
-
-    /* Small badges / metrics */
-    .badge{background:rgba(255,255,255,0.04);padding:6px 8px;border-radius:8px;font-size:13px}
-    #metrics{font-size:13px;color:var(--muted);margin-right:6px}
-
   </style>
 </head>
 <body>
   <header role="banner" aria-label="App header">
     <h1 aria-hidden="true">✈️ Ka Ndeke</h1>
     <div class="header-right" role="navigation" aria-label="Top controls">
-      <div id="metrics" class="badge" aria-live="polite">Loading…</div>
+      <div id="metrics" class="badge" aria-live="polite">Loading metrics...</div>
       <button id="historyBtn" class="badge" onclick="showHistory()" aria-label="Show game history">History</button>
-      <button id="loginBtn" onclick="showLogin()" aria-label="Login">Login</button>
-      <button id="registerBtn" onclick="showRegister()" aria-label="Register">Register</button>
-      <button id="logoutBtn" onclick="logout()" class="hidden" aria-label="Logout">Logout</button>
-      <button id="guestBtn" onclick="useGuest()" aria-label="Use guest mode">Guest</button>
+      <button id="loginBtn" onclick="showLogin()">Login</button>
+      <button id="registerBtn" onclick="showRegister()">Register</button>
+      <button id="logoutBtn" onclick="logout()" class="hidden">Logout</button>
+      <button id="guestBtn" onclick="useGuest()">Guest</button>
     </div>
   </header>
 
-  <main role="main" style="padding-bottom:80px;">
+  <main role="main" style="padding-bottom:92px;">
     <section class="panel" aria-label="User info">
-      <div id="userInfo">Logged in as: <b id="username">Guest</b> — Balance: <b id="balance">ZMW 10.00</b></div>
+      <div id="userInfo">Logged in as: <b id="username">Guest</b> — Balance: <b id="balance">ZMW <span id="balanceVal">10.00</span></b></div>
     </section>
 
     <section class="game-box" aria-live="polite" aria-atomic="true">
@@ -156,12 +119,12 @@
   </main>
 
   <!-- Login Modal -->
-  <div id="loginModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+  <div class="modal" id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
     <div class="modal-content">
       <h3 id="loginTitle">Login</h3>
       <input id="loginPhone" placeholder="Phone number" aria-label="Phone number" />
       <input id="loginPassword" type="password" placeholder="Password" aria-label="Password" />
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+      <div class="flex" style="margin-top:8px; justify-content:flex-end;">
         <button class="primary" onclick="login()">Submit</button>
         <button onclick="hideModals()">Cancel</button>
       </div>
@@ -169,13 +132,13 @@
   </div>
 
   <!-- Register Modal -->
-  <div id="registerModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="registerTitle">
+  <div class="modal" id="registerModal" role="dialog" aria-modal="true" aria-labelledby="registerTitle">
     <div class="modal-content">
       <h3 id="registerTitle">Register</h3>
       <input id="regName" placeholder="Full name" aria-label="Full name" />
       <input id="regPhone" placeholder="Phone number" aria-label="Phone number" />
       <input id="regPassword" type="password" placeholder="Password" aria-label="Password" />
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+      <div class="flex" style="margin-top:8px; justify-content:flex-end;">
         <button class="primary" onclick="register()">Submit</button>
         <button onclick="hideModals()">Cancel</button>
       </div>
@@ -183,11 +146,11 @@
   </div>
 
   <!-- History Modal -->
-  <div id="historyModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+  <div class="modal" id="historyModal" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
     <div class="modal-content">
-      <h3 id="historyTitle">Recent Rounds</h3>
+      <h3 id="historyTitle">Recent Rounds <span class="small" id="historyHint"></span></h3>
       <div id="historyContainer" class="history-list" aria-live="polite"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+      <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">
         <button onclick="loadHistory()">Refresh</button>
         <button onclick="hideHistory()">Close</button>
       </div>
@@ -195,20 +158,31 @@
   </div>
 
   <!-- Round Detail Modal -->
-  <div id="roundModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="roundTitle">
+  <div class="modal" id="roundModal" role="dialog" aria-modal="true" aria-labelledby="roundTitle">
     <div class="modal-content" id="roundContent">
       <h3 id="roundTitle">Round</h3>
       <div id="roundBody"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+      <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">
+        <button id="verifyBtn" onclick="verifyCurrentRound()" class="primary hidden">Verify</button>
         <button onclick="closeRound()">Close</button>
       </div>
     </div>
   </div>
 
-<script>
-/* Lightweight, mobile-first frontend script (keeps prior logic, optimized) */
+  <!-- Scripts -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+/*
+  Full UI + Socket.IO client (automatic token auth, fallback polling, provably-fair verification helpers)
+  - Merges the full-featured UI with realtime updates.
+  - Uses Web Crypto API for verification (SHA-256 & HMAC-SHA256).
+*/
 
-const API = "https://ka-ndeke-backend-5dgy.onrender.com/api";
+const API = location.origin + '/api';
+const SOCKET_PATH = '/socket.io';
+const BROADCAST_FALLBACK_MS = 250;
+const SOCKET_CONNECT_TIMEOUT_MS = 1500;
+
 let user = { guest: true };
 let balance = Number(localStorage.getItem("guest_balance") || 10);
 let running = false;
@@ -217,8 +191,10 @@ let roundCrashed = false;
 let currentRoundId = null;
 let statusPoller = null;
 let spectatorPoller = null;
+let socket = null;
+let socketConnected = false;
 
-/* UI references */
+/* ----------------- DOM refs ----------------- */
 const loginModal = document.getElementById("loginModal");
 const registerModal = document.getElementById("registerModal");
 const historyModal = document.getElementById("historyModal");
@@ -227,11 +203,12 @@ const loginBtn = document.getElementById("loginBtn");
 const registerBtn = document.getElementById("registerBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const guestBtn = document.getElementById("guestBtn");
+const balanceEl = document.getElementById("balanceVal");
+const verifyBtn = document.getElementById("verifyBtn");
 
-/* Basic UI update */
-function updateUI(){
+function updateUI() {
   document.getElementById("username").textContent = user.guest ? "Guest" : (user.username || user.name || "User");
-  document.getElementById("balance").textContent = "ZMW " + Number(balance || 0).toFixed(2);
+  document.getElementById("balanceVal").textContent = Number(balance || 0).toFixed(2);
   if (user.guest) {
     logoutBtn.classList.add("hidden");
     loginBtn.classList.remove("hidden");
@@ -246,23 +223,125 @@ function updateUI(){
 }
 updateUI();
 
-/* modal helpers */
-function show(el){ el.style.display = "flex"; }
-function hide(el){ el.style.display = "none"; }
-function showLogin(){ show(loginModal); }
-function showRegister(){ show(registerModal); }
-function hideModals(){ hide(loginModal); hide(registerModal); }
-function showHistory(){ show(historyModal); loadHistory(); }
-function hideHistory(){ hide(historyModal); }
-function showRoundModal(){ show(roundModal); }
-function closeRound(){ hide(roundModal); }
+/* ----------------- Modal helpers ----------------- */
+function show(el) { el.style.display = "flex"; }
+function hide(el) { el.style.display = "none"; }
+function showLogin() { show(loginModal); }
+function showRegister() { show(registerModal); }
+function hideModals() { hide(loginModal); hide(registerModal); }
+function showHistory() { show(historyModal); loadHistory(); }
+function hideHistory() { hide(historyModal); }
+function showRoundModal() { show(roundModal); }
+function closeRound() { hide(roundModal); verifyBtn.classList.add('hidden'); }
 
-/* Touch-friendly spectator poll */
-function startSpectatorPoll(intervalMs = 250){
+/* ----------------- Web Crypto helpers for verification ----------------- */
+function hexToBytes(hex) {
+  if (!hex) return new Uint8Array();
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return bytes;
+}
+function bytesToHex(bytes) {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+async function sha256Hex(str) {
+  const enc = new TextEncoder();
+  const data = enc.encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return bytesToHex(new Uint8Array(hash));
+}
+async function hmacSha256Hex(keyHex, message = '') {
+  // keyHex is hex string representing key bytes
+  const keyBytes = hexToBytes(keyHex);
+  const cryptoKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(String(message)));
+  return bytesToHex(new Uint8Array(sig));
+}
+function computeCrashFromHashHex(hashHex) {
+  // same 52-bit mapping as server: take first 13 hex chars -> 52 bits
+  const prefix = (hashHex || '').slice(0,13);
+  const h = parseInt(prefix, 16);
+  const e = Math.pow(2,52);
+  const numerator = (100 * e - h);
+  const denominator = (e - h);
+  if (denominator <= 0) return 1.0;
+  const result = Math.floor((numerator / denominator)) / 100;
+  return Math.max(1.0, Number(result.toFixed(2)));
+}
+
+/* ----------------- Socket.IO realtime ----------------- */
+function connectSocket() {
+  try {
+    const token = localStorage.getItem("token");
+    socket = io({
+      auth: { token: token || null }
+    });
+
+    socket.on('connect', () => {
+      socketConnected = true;
+      console.info('socket connected', socket.id);
+      document.getElementById('metrics').textContent = 'Live';
+      stopFallbackPoll();
+    });
+
+    socket.on('connect_error', (err) => {
+      console.warn('socket connect_error', err && err.message ? err.message : err);
+      socketConnected = false;
+      startFallbackPoll();
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.info('socket disconnected', reason);
+      socketConnected = false;
+      startFallbackPoll();
+    });
+
+    socket.on('multiplier', (payload) => {
+      if (!payload) return;
+      renderMultiplier(payload.multiplier || 1);
+      if (payload.status === 'crashed') onCrash(payload);
+      if (payload.status === 'running') {
+        running = true;
+        currentRoundId = payload.roundId || null;
+        document.getElementById('cashOutBtn').disabled = false;
+      } else {
+        document.getElementById('cashOutBtn').disabled = true;
+      }
+    });
+
+    socket.on('roundStarted', (payload) => {
+      console.info('roundStarted', payload);
+      running = true;
+      currentRoundId = payload.roundId || null;
+      document.getElementById('cashOutBtn').disabled = false;
+    });
+
+    socket.on('crash', (payload) => {
+      console.info('crash', payload);
+      onCrash(payload);
+    });
+
+  } catch (e) {
+    console.error('connectSocket error', e);
+    startFallbackPoll();
+  }
+}
+
+function onCrash(payload) {
+  running = false;
+  document.getElementById('cashOutBtn').disabled = true;
+  renderMultiplier(payload.crashPoint || payload.multiplier || 1);
+  try { showToast('Round crashed at ' + (payload.crashPoint || payload.multiplier || 1) + 'x'); } catch (e) {}
+}
+
+/* ----------------- Fallback polling (spectator) ----------------- */
+function startFallbackPoll(intervalMs = BROADCAST_FALLBACK_MS) {
   if (spectatorPoller) return;
-  spectatorPoller = setInterval(async ()=>{
-    try{
-      if (running) { stopSpectatorPoll(); return; }
+  spectatorPoller = setInterval(async () => {
+    try {
+      if (running) { stopFallbackPoll(); return; }
       const res = await fetch(`${API}/game/status`);
       if (!res.ok) return;
       const data = await res.json().catch(()=>null);
@@ -270,235 +349,399 @@ function startSpectatorPoll(intervalMs = 250){
       let liveMult = 1;
       if (data.startedAt) {
         const elapsedMs = Date.now() - Number(data.startedAt);
-        liveMult = 1 + (elapsedMs/1000) * 1;
+        liveMult = 1 + (elapsedMs / 1000) * 1;
       } else if (data.multiplier) {
         liveMult = Number(data.multiplier);
       }
-      if (data.status === "crashed") {
-        renderMultiplierAndPlane(data.multiplier ?? data.crashPoint ?? 1);
-        return;
-      }
-      renderMultiplierAndPlane(liveMult);
-    }catch(e){ console.warn("spectator error", e); }
+      if (data.status === "crashed") { renderMultiplier(data.multiplier ?? data.crashPoint ?? 1); return; }
+      renderMultiplier(liveMult);
+    } catch (e) { console.warn('spectator poll error', e); }
   }, intervalMs);
 }
-function stopSpectatorPoll(){ if (spectatorPoller){ clearInterval(spectatorPoller); spectatorPoller = null; } }
-startSpectatorPoll();
+function stopFallbackPoll() { if (spectatorPoller) { clearInterval(spectatorPoller); spectatorPoller = null; } }
 
-/* render */
-function renderMultiplierAndPlane(mult){
+/* Start socket and fallback */
+connectSocket();
+setTimeout(() => { if (!socketConnected) startFallbackPoll(); }, SOCKET_CONNECT_TIMEOUT_MS);
+
+/* ----------------- Render helpers ----------------- */
+function renderMultiplier(mult) {
   const m = Number(Number(mult || 1).toFixed(2));
   const multEl = document.getElementById("multiplier");
   const planeEl = document.getElementById("plane");
   if (multEl) multEl.textContent = m.toFixed(2) + "x";
   if (planeEl) {
-    const x = Math.min(120, m * 14);
-    const y = m * -5;
+    const x = Math.min(140, m * 14);
+    const y = m * -6;
     planeEl.style.transform = `translate(${x}px, ${y}px)`;
   }
 }
 
-/* helper: get headers including token */
-function authHeaders(){
+/* ----------------- Game API calls (HTTP) ----------------- */
+function authHeaders() {
   const token = localStorage.getItem("token");
-  const headers = { "Content-Type":"application/json" };
+  const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = "Bearer " + token;
   return headers;
 }
 
-/* START GAME */
-async function startGame(){
+async function startGame() {
   if (running) return;
   const bet = Number(document.getElementById("betAmount").value);
   if (!bet || isNaN(bet) || bet <= 0) return alert("Invalid bet amount");
+
   try {
-    const res = await fetch(API + "/game/start", { method:"POST", headers:authHeaders(), body: JSON.stringify({ betAmount: bet }) });
+    const res = await fetch(API + "/game/start", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ betAmount: bet })
+    });
+
     const data = await res.json().catch(()=>({}));
-    if (!res.ok) return alert(data.error || "Failed to start round");
+    if (!res.ok) {
+      return alert(data.error || "Failed to start round");
+    }
+
     if (data.balance !== undefined) { balance = Number(data.balance); updateUI(); }
     currentRoundId = data.roundId;
     currentBet = bet;
-    running = true; roundCrashed = false; updateUI();
-
-    if (statusPoller) { clearInterval(statusPoller); statusPoller = null; }
-    statusPoller = setInterval(async ()=>{
-      try{
-        const r = await fetch(`${API}/game/status`);
-        if (!r.ok) return;
-        const d = await r.json().catch(()=>null); if (!d) return;
-        let liveMult = 1;
-        if (d.startedAt) { const elapsedMs = Date.now() - Number(d.startedAt); liveMult = 1 + (elapsedMs/1000) * 1; }
-        else if (d.multiplier) liveMult = Number(d.multiplier);
-        if (!running) return;
-        if (d.status === "running") { renderMultiplierAndPlane(liveMult); document.getElementById("cashOutBtn").disabled = false; }
-        else if (d.status === "crashed") {
-          renderMultiplierAndPlane(d.multiplier ?? d.crashPoint ?? 1);
-          alert("💥 CRASHED");
-          running = false; roundCrashed = true; document.getElementById("cashOutBtn").disabled = true;
-          currentRoundId = null; currentBet = 0; renderMultiplierAndPlane(1);
-        }
-      }catch(e){ console.error("player poll", e); }
-    }, 140);
-
-  }catch(err){ console.error("startGame", err); alert("Failed to start round"); }
+    roundCrashed = false;
+    running = true;
+    updateUI();
+  } catch (err) {
+    console.error("startGame error", err);
+    alert("Failed to start round: " + (err.message || err));
+  }
 }
 
-/* CASH OUT */
-async function cashOut(){
+async function cashOut() {
   if (roundCrashed) { alert("Too late — round already crashed"); return; }
   try {
-    const st = await fetch(`${API}/game/status`); const stdata = await st.json().catch(()=>({}));
-    if (stdata.status === "crashed") { alert("Round already crashed"); return; }
-  } catch(e){ console.warn("status fetch failed", e); alert("Round status unclear"); return; }
+    const statusRes = await fetch(`${API}/game/status`);
+    const statusData = await statusRes.json().catch(()=>({}));
+    if (statusData.status === "crashed") {
+      alert("Round already crashed");
+      return;
+    }
+  } catch (e) { console.warn("status check failed", e); alert("Round status unclear. Please wait."); return; }
+
   if (!running) { alert("No active round"); return; }
+
   running = false;
-  if (statusPoller){ clearInterval(statusPoller); statusPoller = null; }
   document.getElementById("cashOutBtn").disabled = true;
+
   try {
-    const res = await fetch(API + "/game/cashout", { method:"POST", headers: authHeaders(), body: JSON.stringify({}) });
+    const res = await fetch(API + "/game/cashout", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({})
+    });
     const data = await res.json().catch(()=>({}));
     if (!res.ok) throw new Error(data.error || "Cash out failed");
-    if (data.balance !== undefined) { balance = Number(data.balance); updateUI(); }
-    if (data.win) alert("You won ZMW " + Number(data.payout).toFixed(2)); else alert("Crashed!");
-  } catch (err) { alert(err.message || "Cash out failed"); return; }
-  currentRoundId = null; currentBet = 0; roundCrashed = false; renderMultiplierAndPlane(1); updateUI();
+
+    if (data.balance !== undefined) {
+      balance = Number(data.balance);
+      updateUI();
+    }
+
+    if (data.win) {
+      alert("You won ZMW " + Number(data.payout).toFixed(2));
+    } else {
+      alert("Crashed!");
+    }
+  } catch (err) {
+    alert(err.message || "Cash out failed");
+    return;
+  }
+
+  currentRoundId = null;
+  currentBet = 0;
+  roundCrashed = false;
+  renderMultiplierAndReset();
+  updateUI();
 }
 
-/* AUTH */
-async function refreshBalance(){
-  const token = localStorage.getItem("token"); if (!token) return;
+function renderMultiplierAndReset() {
+  renderMultiplier(1);
+}
+
+/* ----------------- Auth flows ----------------- */
+async function refreshBalance() {
+  const token = localStorage.getItem("token");
+  if (!token) { console.warn("No token for refreshBalance"); return; }
   try {
-    const res = await fetch(API + "/users/me", { headers: { "Authorization":"Bearer " + token } });
-    const data = await res.json().catch(()=>null);
-    if (res.ok && data) { balance = Number(data.balance ?? balance); user = data; updateUI(); }
-  }catch(e){ console.warn("refreshBalance", e); }
+    const res = await fetch(API + "/users/me", { headers: { "Authorization": "Bearer " + token } });
+    const data = await res.json().catch(()=>({}));
+    if (res.ok) {
+      balance = Number(data.balance ?? balance);
+      user = data || user;
+      updateUI();
+    } else {
+      console.warn("refreshBalance non-ok", data);
+    }
+  } catch (err) { console.error("refreshBalance error", err); }
 }
 
-async function login(){
+async function login() {
   if (!loginPhone.value || !loginPassword.value) return alert("Phone and password required");
-  try{
-    const res = await fetch(API + "/auth/login", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ phone: loginPhone.value, password: loginPassword.value })});
+  try {
+    const res = await fetch(API + "/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: loginPhone.value, password: loginPassword.value })
+    });
     const data = await res.json().catch(()=>({}));
     if (!res.ok) throw new Error(data.error || "Login failed");
-    localStorage.setItem("token", data.token); user = data.user ?? { guest:false }; balance = Number(data.user?.balance ?? balance);
-    hideModals(); updateUI(); fetchPublicMetrics(); refreshBalance();
-  }catch(e){ alert(e.message || "Login failed"); }
+    localStorage.setItem("token", data.token);
+    user = data.user ?? { guest: false };
+    balance = Number(data.user?.balance ?? data.balance ?? balance);
+    hideModals();
+    updateUI();
+    fetchPublicMetrics();
+    refreshBalance();
+    // reconnect socket with new token
+    try { if (socket && socket.disconnect) socket.disconnect(); } catch (e) {}
+    connectSocket();
+  } catch (err) { alert(err.message || "Login failed"); }
 }
 
-async function register(){
+async function register() {
   if (!regName.value || !regPhone.value || !regPassword.value) return alert("Username, phone and password required");
-  try{
-    const res = await fetch(API + "/auth/register", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ username: regName.value, phone: regPhone.value, password: regPassword.value })});
+  try {
+    const res = await fetch(API + "/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: regName.value, phone: regPhone.value, password: regPassword.value })
+    });
     const data = await res.json().catch(()=>({}));
     if (!res.ok) throw new Error(data.error || "Register failed");
-    localStorage.setItem("token", data.token); user = data.user ?? { guest:false }; balance = Number(data.user?.balance ?? balance);
-    hideModals(); updateUI(); fetchPublicMetrics(); refreshBalance();
-  }catch(e){ alert(e.message || "Register failed"); }
+    localStorage.setItem("token", data.token);
+    user = data.user ?? { guest: false };
+    balance = Number(data.user?.balance ?? data.balance ?? balance);
+    hideModals();
+    updateUI();
+    fetchPublicMetrics();
+    refreshBalance();
+    try { if (socket && socket.disconnect) socket.disconnect(); } catch (e) {}
+    connectSocket();
+  } catch (err) { alert(err.message || "Register failed"); }
 }
 
-function logout(){
-  user = { guest:true }; const stored = localStorage.getItem("guest_balance"); balance = stored !== null ? Number(stored) : 10;
-  localStorage.removeItem("token"); updateUI(); fetchPublicMetrics();
+function logout() {
+  user = { guest: true };
+  const stored = localStorage.getItem("guest_balance");
+  balance = stored !== null ? Number(stored) : 10;
+  localStorage.removeItem("token");
+  updateUI();
+  fetchPublicMetrics();
+  try { if (socket && socket.disconnect) socket.disconnect(); } catch (e) {}
+  connectSocket();
 }
 
-function useGuest(){ user = { guest:true }; const stored = localStorage.getItem("guest_balance"); balance = stored !== null ? Number(stored) : 10; updateUI(); }
+function useGuest() {
+  user = { guest: true };
+  const stored = localStorage.getItem("guest_balance");
+  balance = stored !== null ? Number(stored) : 10;
+  updateUI();
+}
 
-/* WALLET (keeps previous behaviour) */
-async function deposit(){
-  const amt = prompt("Enter deposit amount"); if (!amt || isNaN(amt) || amt <= 0) return alert("Invalid amount");
-  if (user.guest) { balance += Number(amt); localStorage.setItem("guest_balance", balance); updateUI(); alert("Deposit (guest)"); return; }
-  const token = localStorage.getItem("token"); if (!token) return alert("Must be logged in");
-  try{
-    const res = await fetch(API + "/users/deposit", { method:"POST", headers: {"Content-Type":"application/json","Authorization":"Bearer " + token}, body: JSON.stringify({ amount: Number(amt) })});
+/* ----------------- Wallet actions ----------------- */
+async function deposit() {
+  const amt = prompt("Enter deposit amount");
+  if (!amt || isNaN(amt) || amt <= 0) return alert("Invalid amount");
+  if (user.guest) {
+    balance += Number(amt);
+    localStorage.setItem("guest_balance", balance);
+    updateUI();
+    alert("Deposit succeeded (guest)");
+    return;
+  }
+  const token = localStorage.getItem("token");
+  if (!token) return alert("You must be logged in to deposit");
+  try {
+    const res = await fetch(API + "/users/deposit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ amount: Number(amt) })
+    });
     const data = await res.json().catch(()=>({}));
-    if (!res.ok) return alert(data.error || "Deposit failed");
-    if (data.balance !== undefined) { balance = Number(data.balance); user = data; updateUI(); } else refreshBalance();
-    alert("Deposit succeeded"); fetchPublicMetrics();
-  }catch(e){ console.error("deposit", e); alert("Deposit error"); }
+    if (!res.ok) return alert(data.error || `Deposit failed (HTTP ${res.status})`);
+    if (data.balance !== undefined) { balance = Number(data.balance); user = data; updateUI(); } else await refreshBalance();
+    alert("Deposit succeeded");
+    fetchPublicMetrics();
+  } catch (err) { console.error("deposit error", err); alert("Network error during deposit"); }
 }
 
-async function withdraw(){
-  const amt = prompt("Enter withdraw amount"); if (!amt || isNaN(amt) || amt <= 0) return alert("Invalid amount");
-  if (user.guest) { if (amt > balance) return alert("Insufficient balance"); balance -= Number(amt); localStorage.setItem("guest_balance", balance); updateUI(); return; }
-  const token = localStorage.getItem("token"); if (!token) return alert("Must be logged in");
-  try{
-    const res = await fetch(API + "/users/withdraw", { method:"POST", headers: {"Content-Type":"application/json","Authorization":"Bearer " + token}, body: JSON.stringify({ amount: Number(amt) })});
+async function withdraw() {
+  const amt = prompt("Enter withdraw amount");
+  if (!amt || isNaN(amt) || amt <= 0) return alert("Invalid amount");
+  if (user.guest) {
+    if (amt > balance) return alert("Insufficient balance");
+    balance -= Number(amt);
+    localStorage.setItem("guest_balance", balance);
+    updateUI();
+    alert("Withdraw succeeded (guest)");
+    return;
+  }
+  const token = localStorage.getItem("token");
+  if (!token) return alert("You must be logged in to withdraw");
+  try {
+    const res = await fetch(API + "/users/withdraw", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ amount: Number(amt) })
+    });
     const data = await res.json().catch(()=>({}));
-    if (!res.ok) return alert(data.error || "Withdraw failed");
-    if (data.balance !== undefined) { balance = Number(data.balance); user = data; updateUI(); } else refreshBalance();
-    alert("Withdraw succeeded"); fetchPublicMetrics();
-  }catch(e){ console.error("withdraw", e); alert("Withdraw error"); }
+    if (!res.ok) return alert(data.error || `Withdraw failed (HTTP ${res.status})`);
+    if (data.balance !== undefined) { balance = Number(data.balance); user = data; updateUI(); } else await refreshBalance();
+    alert("Withdraw succeeded");
+    fetchPublicMetrics();
+  } catch (err) { console.error("withdraw error", err); alert("Network error during withdraw"); }
 }
 
-/* HISTORY UI */
-let lastHistoryFetch = 0;
-async function loadHistory(limit = 20){
-  try{
-    const now = Date.now();
-    // throttle rapid refreshes from UI
-    if (now - lastHistoryFetch < 1200) return;
-    lastHistoryFetch = now;
-    const container = document.getElementById("historyContainer");
-    container.innerHTML = '<div class="meta">Loading…</div>';
+/* ----------------- History & Round Detail (with verify) ----------------- */
+async function loadHistory(limit = 20) {
+  try {
+    document.getElementById('historyHint').textContent = 'Loading...';
     const res = await fetch(`${API}/game/history?limit=${limit}`);
     const data = await res.json().catch(()=>null);
-    if (!res.ok || !data || !Array.isArray(data.rounds)) { container.innerHTML = '<div class="meta">Unable to load history</div>'; return; }
-    if (!data.rounds.length) { container.innerHTML = '<div class="meta">No rounds recorded yet</div>'; return; }
+    const container = document.getElementById('historyContainer');
     container.innerHTML = '';
+    if (!res.ok || !data || !Array.isArray(data.rounds)) {
+      container.innerHTML = '<div class="small">Unable to load history</div>';
+      document.getElementById('historyHint').textContent = '';
+      return;
+    }
+    if (!data.rounds.length) {
+      container.innerHTML = '<div class="small">No rounds recorded yet</div>';
+      document.getElementById('historyHint').textContent = '';
+      return;
+    }
     data.rounds.forEach(r => {
-      const item = document.createElement("div");
-      item.className = "history-item";
-      const shortId = (r.round_id || "").slice(0,8);
+      const el = document.createElement('div');
+      el.className = 'history-item';
       const started = r.started_at ? new Date(r.started_at).toLocaleString() : 'n/a';
       const crash = r.crash_point ? Number(r.crash_point).toFixed(2) + 'x' : 'running';
-      item.innerHTML = `<div><strong>${shortId}</strong><div class="meta">${started}</div></div><div class="meta">${crash}</div>`;
-      item.onclick = () => showRoundDetails(r.round_id);
-      container.appendChild(item);
+      el.innerHTML = `<div class="meta-row"><strong>${r.round_id.slice(0,8)}</strong><span class="badge">${crash}</span></div><div class="small">${started}</div>`;
+      el.onclick = () => showRoundDetails(r.round_id);
+      container.appendChild(el);
     });
-  }catch(e){ console.error("loadHistory", e); document.getElementById("historyContainer").innerHTML = '<div class="meta">Error</div>'; }
+    document.getElementById('historyHint').textContent = `${data.rounds.length} rounds`;
+  } catch (err) {
+    console.error("loadHistory error", err);
+    document.getElementById('historyHint').textContent = '';
+    document.getElementById('historyContainer').innerHTML = '<div class="small">Error loading history</div>';
+  }
 }
 
-async function showRoundDetails(roundId){
-  try{
-    document.getElementById("roundBody").innerHTML = '<div class="meta">Loading…</div>';
+async function showRoundDetails(roundId) {
+  try {
+    document.getElementById('roundTitle').textContent = 'Round ' + roundId.slice(0,12);
+    document.getElementById('roundBody').innerHTML = '<div class="small">Loading...</div>';
     showRoundModal();
     const res = await fetch(`${API}/game/rounds/${encodeURIComponent(roundId)}`);
     const data = await res.json().catch(()=>null);
-    if (!res.ok || !data || !data.round) { document.getElementById("roundBody").innerHTML = '<div class="meta">Unable to load</div>'; return; }
-    const r = data.round; const bets = data.bets || [];
+    if (!res.ok || !data.round) {
+      document.getElementById('roundBody').innerHTML = '<div class="small">Unable to load round details</div>';
+      verifyBtn.classList.add('hidden');
+      return;
+    }
+    const r = data.round;
+    const bets = data.bets || [];
     const started = r.started_at ? new Date(r.started_at).toLocaleString() : 'n/a';
     const ended = r.ended_at ? new Date(r.ended_at).toLocaleString() : 'n/a';
-    let html = `<div class="meta"><strong>Started:</strong> ${started}<br/><strong>Ended:</strong> ${ended}<br/><strong>Crash:</strong> ${r.crash_point ?? 'running'}</div>`;
+    let html = `<div class="small"><b>Started:</b> ${started}<br/><b>Ended:</b> ${ended}<br/><b>Crash:</b> ${r.crash_point ?? 'running'}</div>`;
     html += `<h4 style="margin-top:8px;">Bets (${bets.length})</h4>`;
-    if (!bets.length) html += '<div class="meta">No bets recorded</div>'; else {
+    if (!bets.length) html += '<div class="small">No bets recorded for this round</div>';
+    else {
+      html += '<div class="small">';
       bets.forEach(b => {
-        html += `<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.02)"><strong>${b.user_id ? b.user_id.slice(0,8) : 'guest'}</strong> — ${Number(b.bet_amount).toFixed(2)} ZMW <span class="meta">(${b.status})</span>`;
-        if (b.payout) html += `<div class="meta">payout: ${Number(b.payout).toFixed(2)}</div>`;
+        html += `<div style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.03);"><strong>${b.user_id ? b.user_id.slice(0,8) : 'guest'}</strong> - ${Number(b.bet_amount).toFixed(2)} ZMW <span class="small">(${b.status})</span>`;
+        if (b.payout !== null && typeof b.payout !== 'undefined') html += `<div class="small">payout: ${Number(b.payout).toFixed(2)}</div>`;
         html += '</div>';
       });
+      html += '</div>';
     }
-    document.getElementById("roundBody").innerHTML = html;
-  }catch(e){ console.error("showRoundDetails", e); document.getElementById("roundBody").innerHTML = '<div class="meta">Error loading</div>'; }
+    // show commit info and verification status placeholder
+    html += `<div style="margin-top:12px;"><strong>Commit idx:</strong> ${r.commit_idx ?? 'n/a'} &nbsp; <strong>Seed hash:</strong> ${r.server_seed_hash ? r.server_seed_hash.slice(0,24) + '...' : 'n/a'}</div>`;
+    document.getElementById('roundBody').innerHTML = html;
+
+    // Show verify button if seed revealed
+    if (r.server_seed) {
+      verifyBtn.dataset.roundId = roundId;
+      verifyBtn.classList.remove('hidden');
+    } else {
+      verifyBtn.classList.add('hidden');
+    }
+  } catch (err) {
+    console.error("showRoundDetails error", err);
+    document.getElementById('roundBody').innerHTML = '<div class="small">Error loading details</div>';
+    verifyBtn.classList.add('hidden');
+  }
 }
 
-/* Public metrics fetch (header) */
-async function fetchPublicMetrics(){
-  try{
+/* ----------------- Provably-fair verification ----------------- */
+async function verifyCurrentRound() {
+  const roundId = verifyBtn.dataset.roundId;
+  if (!roundId) return alert('No round selected');
+  try {
+    const res = await fetch(`${API}/game/reveal/${encodeURIComponent(roundId)}`);
+    const data = await res.json().catch(()=>null);
+    if (!res.ok || !data) return alert((data && data.error) || 'Reveal not available');
+    const { serverSeed, serverSeedHash, crashPoint } = data;
+
+    // compute sha256(serverSeed) and compare
+    const computedHash = await sha256Hex(serverSeed);
+    const hashMatch = (computedHash === serverSeedHash);
+    // compute HMAC(serverSeed, '') and map to crash
+    const hmacHex = await hmacSha256Hex(serverSeed, '');
+    const computedCrash = computeCrashFromHashHex(hmacHex);
+
+    let msg = `Seed hash matches: ${hashMatch ? 'YES' : 'NO'}\nComputed crash: ${computedCrash}x\nRecorded crash: ${Number(crashPoint).toFixed(2)}x`;
+    if (Math.abs(computedCrash - Number(crashPoint)) < 0.01) {
+      msg += '\nVerification: OK';
+    } else {
+      msg += '\nVerification: MISMATCH';
+    }
+    alert(msg);
+  } catch (e) {
+    console.error('verify error', e);
+    alert('Verification failed: ' + (e && e.message ? e.message : e));
+  }
+}
+
+/* ----------------- Metrics / header info ----------------- */
+async function fetchPublicMetrics() {
+  try {
     const res = await fetch(`${API}/metrics/public`);
     const m = await res.json().catch(()=>null);
-    if (res.ok && m) document.getElementById("metrics").textContent = `B:${m.totalBets} V:${m.totalVolume} P:${m.totalPayouts}`;
-    else document.getElementById("metrics").textContent = '';
-  }catch(e){ document.getElementById("metrics").textContent = ''; }
+    if (res.ok && m) {
+      document.getElementById('metrics').textContent = `Bets:${m.totalBets} Vol:${m.totalVolume} Payouts:${m.totalPayouts}`;
+    } else {
+      document.getElementById('metrics').textContent = '';
+    }
+  } catch (e) {
+    document.getElementById('metrics').textContent = '';
+  }
 }
 fetchPublicMetrics();
 setInterval(fetchPublicMetrics, 60_000);
 
-/* small UX: close modal by clicking backdrop */
-document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", (ev) => { if (ev.target === m) m.style.display = "none"; }));
+/* ----------------- Utility: small toast ----------------- */
+function showToast(msg) {
+  try {
+    alert(msg);
+  } catch(e) {}
+}
 
-/* initial UI update and balance refresh */
+/* ----------------- Initial hydration ----------------- */
 updateUI();
 refreshBalance();
-</script>
+
+/* ----------------- Close modals on backdrop click ----------------- */
+document.querySelectorAll('.modal').forEach(m => {
+  m.addEventListener('click', (ev) => { if (ev.target === m) m.style.display = 'none'; });
+});
+  </script>
 </body>
 </html>
