@@ -23,7 +23,7 @@ router.post("/init-db", requireAdmin, async (req, res) => {
     return sendError(res, 500, "Database not initialized on server");
   }
 
-  // Create users table (if not present) and bets table
+  // Create users table (if not present) and bets table and rounds table
   const createUsersTable = `
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY,
@@ -53,13 +53,29 @@ router.post("/init-db", requireAdmin, async (req, res) => {
     CREATE INDEX IF NOT EXISTS idx_bets_round_id ON bets (round_id);
   `;
 
+  const createRoundsTable = `
+    CREATE TABLE IF NOT EXISTS rounds (
+      id UUID PRIMARY KEY,
+      round_id TEXT UNIQUE NOT NULL,
+      crash_point NUMERIC(10,2),
+      server_seed_hash TEXT,
+      started_at TIMESTAMPTZ NOT NULL,
+      ended_at TIMESTAMPTZ,
+      meta JSONB DEFAULT '{}'::jsonb,
+      createdat TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_rounds_round_id ON rounds (round_id);
+    CREATE INDEX IF NOT EXISTS idx_rounds_started_at ON rounds (started_at);
+  `;
+
   try {
     await db.query(createUsersTable);
     await db.query(createBetsTable);
-    return res.json({ ok: true, message: "users + bets tables created (if not already existed)" });
+    await db.query(createRoundsTable);
+    return res.json({ ok: true, message: "users + bets + rounds tables created (if not already existed)" });
   } catch (err) {
     logger.error("Init DB error:", { message: err && err.message ? err.message : String(err), stack: err && err.stack ? err.stack : undefined });
-    return sendError(res, 500, "Init DB failed", err && err.message ? err.message : undefined);
+    return sendError(res, 500, "Init DB failed", err.message);
   }
 });
 
@@ -74,7 +90,7 @@ router.get("/users", requireAdmin, async (req, res) => {
     );
     return res.json({ users: result.rows || [] });
   } catch (err) {
-    logger.error("Admin list users error:", { message: err && err.message ? err.message : String(err), stack: err && err.stack ? err.stack : undefined });
+    logger.error("Admin list users error:", { message: err && err.message ? err.message : String(err) });
     return sendError(res, 500, "Server error");
   }
 });
