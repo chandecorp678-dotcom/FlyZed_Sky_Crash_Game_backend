@@ -5,8 +5,6 @@ const cors = require("cors");
 const path = require("path");
 const crypto = require("crypto");
 const http = require("http");
-const { Server: IOServer } = require("socket.io");
-const jwt = require("jsonwebtoken");
 
 const logger = require("./logger");
 const { initDb, pool } = require("./db");
@@ -18,7 +16,6 @@ const app = express();
 
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 15000);
 const BROADCAST_INTERVAL_MS = Number(process.env.BROADCAST_INTERVAL_MS || 100); // default 100ms
-const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 
 app.use((req, res, next) => {
   logger.info('http.request.start', { method: req.method, url: req.originalUrl, ip: req.ip });
@@ -30,7 +27,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/api", routes);
 
-/* =================== Provably-fair helpers (unchanged) =================== */
+/* =================== Provably-fair helpers (kept minimal) =================== */
 function hmacHex(key, msg) {
   return crypto.createHmac('sha256', key).update(String(msg)).digest('hex');
 }
@@ -44,7 +41,6 @@ if (!SEED_MASTER) {
 }
 
 /* =================== DB persist helpers (round start/crash) =================== */
-
 async function persistRoundStart(db, round) {
   try {
     const id = crypto.randomUUID();
@@ -77,7 +73,6 @@ async function persistRoundCrash(db, round) {
 }
 
 /* =================== Seed commit helpers (used by provably fair Stage 7) =================== */
-
 async function deriveSeedForIdx(idx) {
   if (!SEED_MASTER) {
     return crypto.randomBytes(32).toString('hex');
@@ -105,73 +100,45 @@ async function ensureNextCommitExists(db) {
   return { idx: nextIdx, seed_hash: seedHash, created_at: new Date().toISOString() };
 }
 
-/* =================== Socket.IO setup and broadcast loop =================== */
-
+/* =================== HTTP server and optional Socket.IO =================== */
 const httpServer = http.createServer(app);
-const io = new IOServer(httpServer, {
-  cors: { origin: true, credentials: true }
-});
 
-// Per-socket authentication using JWT (optional token). If provided, attach userId to socket.
-io.use((socket, next) => {
+// Try to require socket.io optionally. If it's not installed, continue without sockets.
+let io = null;
+let socketAvailable = false;
+try {
+  // require inside try to avoid crashing if socket.io missing
+  const { Server: IOServer } = require("socket.io");
+  io = new IOServer(httpServer, {
+    cors: { origin: true, credentials: true }
+  });
+  socketAvailable = true;
+  logger.info('socket.io.loaded');
+} catch (err) {
+  socketAvailable = false;
+  io = null;
+  logger.warn('socket.io.missing', { message: 'socket.io not installed. Running without realtime sockets.' });
+}
+
+// safeEmit wrapper: no-op when sockets are missing
+function safeEmit(event, payload) {
   try {
-    const token = socket.handshake.auth && socket.handshake.auth.token ? socket.handshake.auth.token
-                : socket.handshake.query && socket.handshake.query.token ? socket.handshake.query.token
-                : null;
-    if (!token) return next(); // allow unauthenticated sockets (spectators)
-    try {
-      const payload = jwt.verify(token, JWT_SECRET);
-      if (payload && payload.uid) {
-        socket.data = socket.data || {};
-        socket.data.userId = payload.uid;
-      }
-      return next();
-    } catch (err) {
-      // token invalid -> still allow connection as unauthenticated spectator
-      logger.warn('socket.auth.invalid', { message: err && err.message ? err.message : String(err) });
-      return next();
+    if (socketAvailable && io && typeof io.emit === 'function') {
+      io.emit(event, payload);
     }
   } catch (e) {
-    logger.error('socket.auth.error', { message: e && e.message ? e.message : String(e) });
-    return next();
+    logger.warn('safeEmit.error', { event, message: e && e.message ? e.message : String(e) });
   }
-});
+}
 
-io.on('connection', (socket) => {
-  try {
-    logger.info('socket.connected', { id: socket.id, userId: socket.data && socket.data.userId ? socket.data.userId : null });
-    // Clients can optionally join a room for a specific round (future use):
-    socket.on('joinRoundRoom', (roundId) => {
-      try {
-        if (typeof roundId === 'string' && roundId.length) {
-          socket.join(`round:${roundId}`);
-        }
-      } catch (e) {}
-    });
-
-    socket.on('leaveRoundRoom', (roundId) => {
-      try {
-        if (typeof roundId === 'string' && roundId.length) socket.leave(`round:${roundId}`);
-      } catch (e) {}
-    });
-
-    socket.on('disconnect', (reason) => {
-      logger.info('socket.disconnected', { id: socket.id, reason });
-    });
-  } catch (e) {
-    logger.error('socket.connection.handler_error', { message: e && e.message ? e.message : String(e) });
-  }
-});
-
-// Broadcast loop: every BROADCAST_INTERVAL_MS, get current round status and emit 'multiplier'
+/* =================== Broadcast loop (uses safeEmit) =================== */
 let broadcastTimer = null;
 function startBroadcastLoop() {
   if (broadcastTimer) return;
   broadcastTimer = setInterval(() => {
     try {
       const status = gameEngine.getRoundStatus();
-      // Emit to all clients the real-time multiplier snapshot
-      io.emit('multiplier', {
+      safeEmit('multiplier', {
         roundId: status.roundId || null,
         status: status.status || 'waiting',
         multiplier: status.multiplier || null,
@@ -185,12 +152,11 @@ function startBroadcastLoop() {
   }, BROADCAST_INTERVAL_MS);
   if (broadcastTimer && typeof broadcastTimer.unref === 'function') broadcastTimer.unref();
 }
-
 function stopBroadcastLoop() {
   try { if (broadcastTimer) { clearInterval(broadcastTimer); broadcastTimer = null; } } catch (e) {}
 }
 
-/* =================== Engine event attachments =================== */
+/* =================== Engine event attachments (use safeEmit) =================== */
 function attachEngineListeners(db) {
   const emitter = gameEngine.emitter;
   if (!emitter || !emitter.on) {
@@ -201,8 +167,7 @@ function attachEngineListeners(db) {
   emitter.on('roundStarted', async (r) => {
     try {
       await persistRoundStart(db, r);
-      // Immediate broadcast of roundStarted
-      io.emit('roundStarted', {
+      safeEmit('roundStarted', {
         roundId: r.roundId,
         commitIdx: r.commitIdx,
         serverSeedHash: r.serverSeedHash,
@@ -210,7 +175,6 @@ function attachEngineListeners(db) {
         startedAt: r.startedAt
       });
 
-      // After persisting, ensure next commit exists and set engine next seed (same logic as before)
       try {
         const nextCommit = await ensureNextCommitExists(db);
         if (nextCommit) {
@@ -228,11 +192,9 @@ function attachEngineListeners(db) {
 
   emitter.on('roundCrashed', async (r) => {
     try {
-      // Persist crash (including revealed serverSeed)
       await persistRoundCrash(db, r);
-
-      // Broadcast crash immediately. Do NOT include serverSeed in this broadcast; reveal endpoint can be fetched later.
-      io.emit('crash', {
+      // broadcast crash without revealing seed; reveal endpoint remains available
+      safeEmit('crash', {
         roundId: r.roundId,
         crashPoint: r.crashPoint,
         commitIdx: r.commitIdx,
@@ -247,16 +209,13 @@ function attachEngineListeners(db) {
 }
 
 /* =================== Start sequence =================== */
-
 async function start() {
   try {
     await initDb();
     app.locals.db = pool;
 
-    // Seed commit pipeline
     try { await ensureNextCommitExists(pool); } catch (e) { logger.warn('start.ensureNextCommit_failed', { message: e && e.message ? e.message : String(e) }); }
 
-    // set engine next seed from latest commit
     try {
       const latestCommit = await getLatestCommit(pool);
       if (latestCommit) {
@@ -270,10 +229,8 @@ async function start() {
       logger.warn('start.set_next_seed_failed', { message: e && e.message ? e.message : String(e) });
     }
 
-    // Attach engine listeners
     attachEngineListeners(pool);
 
-    // Start engine and broadcast loop
     try {
       gameEngine.startEngine();
       startBroadcastLoop();
@@ -285,7 +242,24 @@ async function start() {
     const PORT = process.env.PORT || 3000;
     httpServer.listen(PORT, () => {
       logger.info("server.started", { port: PORT, broadcast_interval_ms: BROADCAST_INTERVAL_MS });
+      if (!socketAvailable) {
+        logger.warn('server.running_without_socketio', { message: 'Socket.IO not available; realtime disabled until dependency installed.' });
+      }
     });
+
+    // If sockets are available, wire basic connection events (non-critical)
+    if (socketAvailable && io) {
+      io.on('connection', (socket) => {
+        try {
+          logger.info('socket.connected', { id: socket.id });
+          socket.on('disconnect', (reason) => {
+            logger.info('socket.disconnected', { id: socket.id, reason });
+          });
+        } catch (e) {
+          logger.warn('socket.connection.handler_error', { message: e && e.message ? e.message : String(e) });
+        }
+      });
+    }
 
   } catch (err) {
     logger.error("server.start.failed", { message: err && err.message ? err.message : String(err) });
@@ -295,9 +269,9 @@ async function start() {
 
 start();
 
-/* =================== Provably-fair public endpoints (keep existing) =================== */
+/* ============ Public provably-fair endpoints (kept) ============ */
 
-// GET /api/game/commitments/latest -> returns latest committed seed hash & idx
+// GET /api/game/commitments/latest
 app.get('/api/game/commitments/latest', async (req, res) => {
   try {
     const commit = await getLatestCommit(pool);
@@ -336,8 +310,7 @@ app.get('/api/game/reveal/:roundId', async (req, res) => {
   }
 });
 
-/* =================== Global error handler & graceful shutdown =================== */
-
+/* ============ Error handler & shutdown ============ */
 app.use((err, req, res, next) => {
   if (res.headersSent) {
     logger.warn('api.error.headers_already_sent', { error: err && err.message ? err.message : String(err) });
@@ -363,7 +336,7 @@ async function gracefulShutdown(reason = 'signal') {
         httpServer.close(() => resolve());
       });
     } catch (e) {}
-    try { io.close(); } catch (e) {}
+    try { if (socketAvailable && io && typeof io.close === 'function') io.close(); } catch (e) {}
     try { if (pool && pool.end) await pool.end(); } catch (e) {}
     logger.info('shutdown.complete');
     process.exit(0);
@@ -378,4 +351,4 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('uncaughtException', (err) => { logger.error('uncaughtException', { message: err && err.message ? err.message : String(err), stack: err && err.stack ? err.stack : undefined }); gracefulShutdown('uncaughtException'); });
 process.on('unhandledRejection', (reason) => { logger.error('unhandledRejection', { reason: reason && reason.message ? reason.message : String(reason) }); gracefulShutdown('unhandledRejection'); });
 
-module.exports = { app, httpServer, io };
+module.exports = { app, httpServer, _internal: { socketAvailable } };
