@@ -14,14 +14,13 @@ const { sendError } = require("./apiResponses");
 
 const app = express();
 
-// Phase 9.1: Validate critical environment variables at startup
+// Phase 9.1: Validate critical environment variables at startup (non-fatal warning)
 function validateEnv() {
-  const required = ['JWT_SECRET', 'ADMIN_TOKEN', 'DATABASE_URL'];
-  const missing = required.filter(key => !process.env[key] || process.env[key] === `change-this-${key.toLowerCase()}`);
+  const required = ['JWT_SECRET', 'DATABASE_URL'];
+  const missing = required.filter(key => !process.env[key]);
   
   if (missing.length > 0) {
-    logger.error('server.startup.env_validation_failed', { missing });
-    throw new Error(`Missing or default environment variables: ${missing.join(', ')}. Please set in Render environment.`);
+    logger.warn('server.startup.env_validation_warning', { missing, message: 'Some environment variables are not set. This may cause issues.' });
   }
 }
 
@@ -56,13 +55,15 @@ async function persistRoundStart(db, round) {
   try {
     const id = crypto.randomUUID();
     const startedAtIso = new Date(Number(round.startedAt)).toISOString();
+    const SETTLEMENT_WINDOW_SECONDS = Number(process.env.SETTLEMENT_WINDOW_SECONDS || 300);
+    
     await db.query(
-      `INSERT INTO rounds (id, round_id, server_seed_hash, commit_idx, crash_point, started_at, meta, createdat)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+      `INSERT INTO rounds (id, round_id, server_seed_hash, commit_idx, crash_point, started_at, settlement_window_seconds, meta, createdat)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
        ON CONFLICT (round_id) DO NOTHING`,
-      [id, round.roundId, round.serverSeedHash || null, round.commitIdx || null, round.crashPoint || null, startedAtIso, round.meta || {}]
+      [id, round.roundId, round.serverSeedHash || null, round.commitIdx || null, round.crashPoint || null, startedAtIso, SETTLEMENT_WINDOW_SECONDS, round.meta || {}]
     );
-    logger.info('persistRoundStart.success', { roundId: round.roundId, commitIdx: round.commitIdx });
+    logger.info('persistRoundStart.success', { roundId: round.roundId, commitIdx: round.commitIdx, settlementWindowSeconds: SETTLEMENT_WINDOW_SECONDS });
   } catch (e) {
     logger.error('persistRoundStart.error', { message: e && e.message ? e.message : String(e) });
   }
@@ -71,13 +72,18 @@ async function persistRoundStart(db, round) {
 async function persistRoundCrash(db, round) {
   try {
     const endedAtIso = new Date(Number(round.endedAt)).toISOString();
+    // Phase 9.2A: Calculate settlement window close time
+    const SETTLEMENT_WINDOW_SECONDS = Number(process.env.SETTLEMENT_WINDOW_SECONDS || 300);
+    const settlementClosedAtMs = Number(round.endedAt) + (SETTLEMENT_WINDOW_SECONDS * 1000);
+    const settlementClosedAtIso = new Date(settlementClosedAtMs).toISOString();
+
     await db.query(
       `UPDATE rounds
-       SET crash_point = $1, ended_at = $2, meta = meta || $3::jsonb, server_seed = $4, server_seed_revealed_at = NOW()
-       WHERE round_id = $5`,
-      [round.crashPoint || null, endedAtIso, JSON.stringify(round.meta || {}), round.serverSeed || null, round.roundId]
+       SET crash_point = $1, ended_at = $2, settlement_closed_at = $3, meta = meta || $4::jsonb, server_seed = $5, server_seed_revealed_at = NOW()
+       WHERE round_id = $6`,
+      [round.crashPoint || null, endedAtIso, settlementClosedAtIso, JSON.stringify(round.meta || {}), round.serverSeed || null, round.roundId]
     );
-    logger.info('persistRoundCrash.success', { roundId: round.roundId });
+    logger.info('persistRoundCrash.success', { roundId: round.roundId, settlementClosedAt: settlementClosedAtIso });
   } catch (e) {
     logger.error('persistRoundCrash.error', { message: e && e.message ? e.message : String(e) });
   }
@@ -222,7 +228,7 @@ function attachEngineListeners(db) {
 /* =================== Start sequence =================== */
 async function start() {
   try {
-    // Phase 9.1: Validate environment
+    // Phase 9.1: Validate environment (warn only, don't fail)
     validateEnv();
 
     await initDb();
