@@ -11,6 +11,41 @@ const cache = require("./cache");
 
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret"; // secure secret in Render env
 
+// Phase 9.1: Validation constants
+const MIN_PASSWORD_LENGTH = 6;
+const MAX_USERNAME_LENGTH = 100;
+const PHONE_REGEX = /^[+]?[\d\s\-()]{7,15}$/; // Basic international phone validation
+
+// Phase 9.1: Validate password strength
+function validatePassword(password) {
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    return { valid: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
+  }
+  return { valid: true };
+}
+
+// Phase 9.1: Validate phone number format
+function validatePhone(phone) {
+  if (!phone || !PHONE_REGEX.test(phone)) {
+    return { valid: false, error: "Phone number format invalid" };
+  }
+  return { valid: true };
+}
+
+// Phase 9.1: Validate username
+function validateUsername(username) {
+  if (!username || username.length < 2 || username.length > MAX_USERNAME_LENGTH) {
+    return { valid: false, error: `Username must be between 2 and ${MAX_USERNAME_LENGTH} characters` };
+  }
+  return { valid: true };
+}
+
+// Phase 9.1: Sanitize user input (prevent injection)
+function sanitizeInput(input) {
+  if (typeof input !== 'string') return input;
+  return input.trim().slice(0, 500); // limit length
+}
+
 // ----------------- Helper -----------------
 function sanitizeUser(row) {
   if (!row) return null;
@@ -57,9 +92,22 @@ router.post("/game/payout", express.json(), (req, res) => {
 // ----------------- Auth & User endpoints -----------------
 router.post("/auth/register", express.json(), wrapAsync(async (req, res) => {
   const db = req.app.locals.db;
-  const { username, phone, password } = req.body || {};
-  if (!username || !phone || !password)
-    return sendError(res, 400, "username, phone and password required");
+  let { username, phone, password } = req.body || {};
+
+  // Phase 9.1: Sanitize inputs
+  username = sanitizeInput(username);
+  phone = sanitizeInput(phone);
+  password = sanitizeInput(password);
+
+  // Phase 9.1: Validate inputs
+  const usernameValidation = validateUsername(username);
+  if (!usernameValidation.valid) return sendError(res, 400, usernameValidation.error);
+
+  const phoneValidation = validatePhone(phone);
+  if (!phoneValidation.valid) return sendError(res, 400, phoneValidation.error);
+
+  const passwordValidation = validatePassword(password);
+  if (!passwordValidation.valid) return sendError(res, 400, passwordValidation.error);
 
   const existing = await db.query("SELECT id FROM users WHERE phone = $1", [phone]);
   if (existing.rows.length) return sendError(res, 409, "Phone already registered");
@@ -78,12 +126,19 @@ router.post("/auth/register", express.json(), wrapAsync(async (req, res) => {
   const user = sanitizeUser(userRow.rows[0]);
   const token = jwt.sign({ uid: id }, JWT_SECRET, { expiresIn: "30d" });
 
+  logger.info('auth.register.success', { userId: id, phone });
+
   return res.status(201).json({ token, user });
 }));
 
 router.post("/auth/login", express.json(), wrapAsync(async (req, res) => {
   const db = req.app.locals.db;
-  const { phone, password } = req.body || {};
+  let { phone, password } = req.body || {};
+
+  // Phase 9.1: Sanitize inputs
+  phone = sanitizeInput(phone);
+  password = sanitizeInput(password);
+
   if (!phone || !password) return sendError(res, 400, "phone and password required");
 
   const rowRes = await db.query("SELECT * FROM users WHERE phone = $1", [phone]);
@@ -91,10 +146,16 @@ router.post("/auth/login", express.json(), wrapAsync(async (req, res) => {
   if (!row) return sendError(res, 401, "Invalid credentials");
 
   const ok = await bcrypt.compare(password, row.password_hash || "");
-  if (!ok) return sendError(res, 401, "Invalid credentials");
+  if (!ok) {
+    logger.warn('auth.login.invalid_password', { phone });
+    return sendError(res, 401, "Invalid credentials");
+  }
 
   const user = sanitizeUser(row);
   const token = jwt.sign({ uid: row.id }, JWT_SECRET, { expiresIn: "30d" });
+
+  logger.info('auth.login.success', { userId: row.id, phone });
+
   return res.json({ token, user });
 }));
 
