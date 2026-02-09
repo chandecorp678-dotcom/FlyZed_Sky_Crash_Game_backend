@@ -8,8 +8,20 @@ const { v4: uuidv4 } = require("uuid");
 const logger = require("./logger");
 const { sendError, sendSuccess, wrapAsync } = require("./apiResponses");
 const cache = require("./cache");
+const RateLimiter = require("./rateLimiter");
 
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret"; // secure secret in Render env
+
+// Phase 9.2: Rate limiting for auth endpoints
+const registerLimiter = new RateLimiter({
+  maxRequests: Number(process.env.REGISTER_RATE_LIMIT_REQUESTS || 3), // 3 attempts
+  windowMs: Number(process.env.REGISTER_RATE_LIMIT_WINDOW_MS || 3600000) // per 1 hour
+});
+
+const loginLimiter = new RateLimiter({
+  maxRequests: Number(process.env.LOGIN_RATE_LIMIT_REQUESTS || 5), // 5 attempts
+  windowMs: Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || 900000) // per 15 minutes
+});
 
 // Phase 9.1: Validation constants
 const MIN_PASSWORD_LENGTH = 6;
@@ -44,6 +56,13 @@ function validateUsername(username) {
 function sanitizeInput(input) {
   if (typeof input !== 'string') return input;
   return input.trim().slice(0, 500); // limit length
+}
+
+// Phase 9.2: Sanitize numeric input (prevent negative/extreme values)
+function sanitizeNumeric(value, min = 0, max = Infinity) {
+  const num = Number(value);
+  if (isNaN(num)) return null;
+  return Math.max(min, Math.min(max, num));
 }
 
 // ----------------- Helper -----------------
@@ -90,74 +109,91 @@ router.post("/game/payout", express.json(), (req, res) => {
 });
 
 // ----------------- Auth & User endpoints -----------------
-router.post("/auth/register", express.json(), wrapAsync(async (req, res) => {
-  const db = req.app.locals.db;
-  let { username, phone, password } = req.body || {};
 
-  // Phase 9.1: Sanitize inputs
-  username = sanitizeInput(username);
-  phone = sanitizeInput(phone);
-  password = sanitizeInput(password);
+// Phase 9.2: Register with rate limiting
+router.post("/auth/register", 
+  registerLimiter.middleware({
+    keyFn: (req) => req.ip,
+    onLimitExceeded: (req, res) => sendError(res, 429, "Too many registration attempts. Please try again later.")
+  }),
+  express.json(), 
+  wrapAsync(async (req, res) => {
+    const db = req.app.locals.db;
+    let { username, phone, password } = req.body || {};
 
-  // Phase 9.1: Validate inputs
-  const usernameValidation = validateUsername(username);
-  if (!usernameValidation.valid) return sendError(res, 400, usernameValidation.error);
+    // Phase 9.1: Sanitize inputs
+    username = sanitizeInput(username);
+    phone = sanitizeInput(phone);
+    password = sanitizeInput(password);
 
-  const phoneValidation = validatePhone(phone);
-  if (!phoneValidation.valid) return sendError(res, 400, phoneValidation.error);
+    // Phase 9.1: Validate inputs
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) return sendError(res, 400, usernameValidation.error);
 
-  const passwordValidation = validatePassword(password);
-  if (!passwordValidation.valid) return sendError(res, 400, passwordValidation.error);
+    const phoneValidation = validatePhone(phone);
+    if (!phoneValidation.valid) return sendError(res, 400, phoneValidation.error);
 
-  const existing = await db.query("SELECT id FROM users WHERE phone = $1", [phone]);
-  if (existing.rows.length) return sendError(res, 409, "Phone already registered");
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) return sendError(res, 400, passwordValidation.error);
 
-  const id = uuidv4();
-  const now = new Date().toISOString();
-  const password_hash = await bcrypt.hash(password, 10);
+    const existing = await db.query("SELECT id FROM users WHERE phone = $1", [phone]);
+    if (existing.rows.length) return sendError(res, 409, "Phone already registered");
 
-  await db.query(
-    `INSERT INTO users (id, username, phone, password_hash, balance, freerounds, createdat, updatedat)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [id, username, phone, password_hash, 0, 0, now, now]
-  );
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const password_hash = await bcrypt.hash(password, 10);
 
-  const userRow = await db.query("SELECT * FROM users WHERE id = $1", [id]);
-  const user = sanitizeUser(userRow.rows[0]);
-  const token = jwt.sign({ uid: id }, JWT_SECRET, { expiresIn: "30d" });
+    await db.query(
+      `INSERT INTO users (id, username, phone, password_hash, balance, freerounds, createdat, updatedat)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [id, username, phone, password_hash, 0, 0, now, now]
+    );
 
-  logger.info('auth.register.success', { userId: id, phone });
+    const userRow = await db.query("SELECT * FROM users WHERE id = $1", [id]);
+    const user = sanitizeUser(userRow.rows[0]);
+    const token = jwt.sign({ uid: id }, JWT_SECRET, { expiresIn: "30d" });
 
-  return res.status(201).json({ token, user });
-}));
+    logger.info('auth.register.success', { userId: id, phone });
 
-router.post("/auth/login", express.json(), wrapAsync(async (req, res) => {
-  const db = req.app.locals.db;
-  let { phone, password } = req.body || {};
+    return res.status(201).json({ token, user });
+  })
+);
 
-  // Phase 9.1: Sanitize inputs
-  phone = sanitizeInput(phone);
-  password = sanitizeInput(password);
+// Phase 9.2: Login with rate limiting
+router.post("/auth/login",
+  loginLimiter.middleware({
+    keyFn: (req) => req.ip,
+    onLimitExceeded: (req, res) => sendError(res, 429, "Too many login attempts. Please try again later.")
+  }),
+  express.json(),
+  wrapAsync(async (req, res) => {
+    const db = req.app.locals.db;
+    let { phone, password } = req.body || {};
 
-  if (!phone || !password) return sendError(res, 400, "phone and password required");
+    // Phase 9.1: Sanitize inputs
+    phone = sanitizeInput(phone);
+    password = sanitizeInput(password);
 
-  const rowRes = await db.query("SELECT * FROM users WHERE phone = $1", [phone]);
-  const row = rowRes.rows[0];
-  if (!row) return sendError(res, 401, "Invalid credentials");
+    if (!phone || !password) return sendError(res, 400, "phone and password required");
 
-  const ok = await bcrypt.compare(password, row.password_hash || "");
-  if (!ok) {
-    logger.warn('auth.login.invalid_password', { phone });
-    return sendError(res, 401, "Invalid credentials");
-  }
+    const rowRes = await db.query("SELECT * FROM users WHERE phone = $1", [phone]);
+    const row = rowRes.rows[0];
+    if (!row) return sendError(res, 401, "Invalid credentials");
 
-  const user = sanitizeUser(row);
-  const token = jwt.sign({ uid: row.id }, JWT_SECRET, { expiresIn: "30d" });
+    const ok = await bcrypt.compare(password, row.password_hash || "");
+    if (!ok) {
+      logger.warn('auth.login.invalid_password', { phone });
+      return sendError(res, 401, "Invalid credentials");
+    }
 
-  logger.info('auth.login.success', { userId: row.id, phone });
+    const user = sanitizeUser(row);
+    const token = jwt.sign({ uid: row.id }, JWT_SECRET, { expiresIn: "30d" });
 
-  return res.json({ token, user });
-}));
+    logger.info('auth.login.success', { userId: row.id, phone });
+
+    return res.json({ token, user });
+  })
+);
 
 // ----------------- Auth middleware -----------------
 async function requireAuth(req, res, next) {
@@ -192,8 +228,11 @@ router.get("/users/me", requireAuth, (req, res) => {
 // Extracted handler for changing balance — atomic update
 const changeBalanceHandler = wrapAsync(async (req, res) => {
   const db = req.app.locals.db;
-  const delta = Number(req.body?.delta);
-  if (isNaN(delta)) return sendError(res, 400, "delta must be a number");
+  let delta = Number(req.body?.delta);
+
+  // Phase 9.2: Sanitize numeric input
+  delta = sanitizeNumeric(delta, -1000000, 1000000);
+  if (delta === null) return sendError(res, 400, "delta must be a valid number");
 
   try {
     const rowRes = await db.query(
@@ -218,15 +257,23 @@ const changeBalanceHandler = wrapAsync(async (req, res) => {
 router.post("/users/balance/change", requireAuth, express.json(), changeBalanceHandler);
 
 router.post("/users/deposit", requireAuth, express.json(), wrapAsync(async (req, res) => {
-  const amount = Number(req.body?.amount);
-  if (isNaN(amount) || amount <= 0) return sendError(res, 400, "amount must be > 0");
+  let amount = Number(req.body?.amount);
+
+  // Phase 9.2: Validate and sanitize deposit amount
+  amount = sanitizeNumeric(amount, 0.01, 1000000);
+  if (amount === null) return sendError(res, 400, "amount must be a valid number between 0.01 and 1000000");
+
   req.body = { delta: amount };
   return changeBalanceHandler(req, res);
 }));
 
 router.post("/users/withdraw", requireAuth, express.json(), wrapAsync(async (req, res) => {
-  const amount = Number(req.body?.amount);
-  if (isNaN(amount) || amount <= 0) return sendError(res, 400, "amount must be > 0");
+  let amount = Number(req.body?.amount);
+
+  // Phase 9.2: Validate and sanitize withdraw amount
+  amount = sanitizeNumeric(amount, 0.01, 1000000);
+  if (amount === null) return sendError(res, 400, "amount must be a valid number between 0.01 and 1000000");
+
   req.body = { delta: -Math.abs(amount) };
   return changeBalanceHandler(req, res);
 }));
@@ -253,7 +300,8 @@ router.get("/game/history", wrapAsync(async (req, res) => {
     return sendError(res, 500, "Database not initialized");
   }
 
-  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+  // Phase 9.2: Sanitize query parameters
+  let limit = sanitizeNumeric(req.query.limit, 1, 200) || 50;
   const force = String(req.query.force || '').toLowerCase() === '1' || String(req.query.force || '').toLowerCase() === 'true';
   const since = req.query.since || null;
 
