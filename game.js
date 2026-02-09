@@ -27,6 +27,13 @@ const CASHOUT_PRUNE_INTERVAL_MS = Number(process.env.CASHOUT_PRUNE_INTERVAL_MS |
 const MIN_BET_AMOUNT = Number(process.env.MIN_BET_AMOUNT || 1);
 const MAX_BET_AMOUNT = Number(process.env.MAX_BET_AMOUNT || 1000000);
 
+// Phase 9.2: Sanitize numeric input (prevent negative/extreme values)
+function sanitizeNumeric(value, min = 0, max = Infinity) {
+  const num = Number(value);
+  if (isNaN(num)) return null;
+  return Math.max(min, Math.min(max, num));
+}
+
 function pruneCashoutMapByAge() {
   const now = Date.now();
   for (const [key, ts] of cashoutTimestamps) {
@@ -59,14 +66,14 @@ router.post("/start", json, async (req, res) => {
     return res.status(401).json({ error: "You must be logged in to place a bet" });
   }
 
-  const betAmount = Number(req.body?.betAmount);
-  if (!betAmount || isNaN(betAmount) || betAmount <= 0) {
-    return res.status(400).json({ error: "Invalid bet amount" });
+  // Phase 9.2: Sanitize bet amount
+  let betAmount = sanitizeNumeric(req.body?.betAmount, MIN_BET_AMOUNT, MAX_BET_AMOUNT);
+  if (betAmount === null || betAmount < MIN_BET_AMOUNT) {
+    return res.status(400).json({ error: `Bet amount must be between ${MIN_BET_AMOUNT} and ${MAX_BET_AMOUNT}` });
   }
 
-  // Phase 9.1: Validate bet amount is within limits
-  if (betAmount < MIN_BET_AMOUNT || betAmount > MAX_BET_AMOUNT) {
-    return res.status(400).json({ error: `Bet amount must be between ${MIN_BET_AMOUNT} and ${MAX_BET_AMOUNT}` });
+  if (betAmount > MAX_BET_AMOUNT) {
+    return res.status(400).json({ error: `Bet amount must not exceed ${MAX_BET_AMOUNT}` });
   }
 
   const status = getRoundStatus();
