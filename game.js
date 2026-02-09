@@ -23,6 +23,10 @@ const CASHOUT_PRUNE_AGE_MS = Number(process.env.CASHOUT_PRUNE_AGE_MS || 1000 * 6
 const MAX_CASHOUT_ENTRIES = Number(process.env.MAX_CASHOUT_ENTRIES || 20000);
 const CASHOUT_PRUNE_INTERVAL_MS = Number(process.env.CASHOUT_PRUNE_INTERVAL_MS || 1000 * 60 * 5);
 
+// Min/max bet amounts (Phase 9.2 preparation – can be configured via env)
+const MIN_BET_AMOUNT = Number(process.env.MIN_BET_AMOUNT || 1);
+const MAX_BET_AMOUNT = Number(process.env.MAX_BET_AMOUNT || 1000000);
+
 function pruneCashoutMapByAge() {
   const now = Date.now();
   for (const [key, ts] of cashoutTimestamps) {
@@ -60,6 +64,11 @@ router.post("/start", json, async (req, res) => {
     return res.status(400).json({ error: "Invalid bet amount" });
   }
 
+  // Phase 9.1: Validate bet amount is within limits
+  if (betAmount < MIN_BET_AMOUNT || betAmount > MAX_BET_AMOUNT) {
+    return res.status(400).json({ error: `Bet amount must be between ${MIN_BET_AMOUNT} and ${MAX_BET_AMOUNT}` });
+  }
+
   const status = getRoundStatus();
   if (!status || status.status !== "running") {
     return res.status(400).json({ error: "No active running round" });
@@ -67,6 +76,23 @@ router.post("/start", json, async (req, res) => {
 
   try {
     const txResult = await runTransaction(db, async (client) => {
+      // Phase 9.1: Check if user already has active bet on this round
+      const existingBetRes = await client.query(
+        `SELECT id, status FROM bets
+         WHERE user_id = $1 AND round_id = $2`,
+        [user.id, status.roundId]
+      );
+
+      if (existingBetRes.rowCount > 0) {
+        const existingBet = existingBetRes.rows[0];
+        if (existingBet.status === 'active') {
+          const err = new Error('You already have an active bet on this round');
+          err.status = 409;
+          throw err;
+        }
+      }
+
+      // Proceed with balance deduction and bet creation
       const updateRes = await client.query(
         `UPDATE users
          SET balance = balance - $1, updatedat = NOW()
@@ -124,6 +150,9 @@ router.post("/start", json, async (req, res) => {
     if (err && err.status === 402) {
       return res.status(402).json({ error: "Insufficient funds" });
     }
+    if (err && err.status === 409) {
+      return res.status(409).json({ error: err.message });
+    }
     logger.error("game/start transaction error", { message: err && err.message ? err.message : String(err) });
     return res.status(500).json({ error: "Server error" });
   }
@@ -178,9 +207,9 @@ router.post("/cashout", json, async (req, res) => {
   try {
     const result = await runTransaction(db, async (client) => {
       const betRes = await client.query(
-        `SELECT id, round_id, user_id, bet_amount, status
+        `SELECT id, round_id, user_id, bet_amount, status, payout
          FROM bets
-         WHERE user_id = $1 AND status = 'active' AND round_id = $2
+         WHERE user_id = $1 AND round_id = $2
          FOR UPDATE`,
          [user.id, getRoundStatus().roundId]
       );
@@ -192,6 +221,20 @@ router.post("/cashout", json, async (req, res) => {
       }
 
       const bet = betRes.rows[0];
+
+      // Phase 9.1: Idempotency check – if already cashed out, return original payout
+      if (bet.status === 'cashed') {
+        logger.info('game.cashout.idempotent_already_cashed', { userId: user.id, betId: bet.id, roundId: bet.round_id });
+        // Return the original payout without paying again
+        const userBalance = await client.query(`SELECT balance FROM users WHERE id = $1`, [user.id]);
+        return { success: true, payout: Number(bet.payout || 0), multiplier: null, balance: Number(userBalance.rows[0]?.balance || 0), idempotent: true };
+      }
+
+      if (bet.status !== 'active') {
+        // Bet already lost/refunded
+        logger.info('game.cashout.bet_not_active', { userId: user.id, betId: bet.id, status: bet.status });
+        return { success: false, payout: 0, multiplier: null, balance: null, idempotent: true };
+      }
 
       let engineResult;
       try {
@@ -239,10 +282,10 @@ router.post("/cashout", json, async (req, res) => {
     cashoutTimestamps.set(user.id, Date.now());
     pruneCashoutMapByAge();
 
-    if (!result.success) {
+    if (!result.success && !result.idempotent) {
       return res.json({ success: false, payout: 0, multiplier: result.multiplier });
     }
-    return res.json({ success: true, payout: result.payout, multiplier: result.multiplier, balance: result.balance });
+    return res.json({ success: result.success, payout: result.payout, multiplier: result.multiplier, balance: result.balance, idempotent: result.idempotent || false });
   } catch (err) {
     if (err && err.status === 400) return res.status(400).json({ error: err.message });
     if (err && err.status === 402) return res.status(402).json({ error: err.message });
