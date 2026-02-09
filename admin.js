@@ -46,7 +46,7 @@ router.post("/init-db", requireAdmin, async (req, res) => {
     );
   `;
 
-  // Bets table (with indexes)
+  // Bets table (with indexes and unique constraint for Phase 9.1)
   const createBetsTable = `
     CREATE TABLE IF NOT EXISTS bets (
       id UUID PRIMARY KEY,
@@ -62,6 +62,7 @@ router.post("/init-db", requireAdmin, async (req, res) => {
     CREATE INDEX IF NOT EXISTS idx_bets_user_id ON bets (user_id);
     CREATE INDEX IF NOT EXISTS idx_bets_round_id ON bets (round_id);
     CREATE INDEX IF NOT EXISTS idx_bets_createdat ON bets (createdat DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_bets_user_round ON bets (user_id, round_id) WHERE status = 'active';
   `;
 
   // Rounds table (with columns for revealed seed and commit index)
