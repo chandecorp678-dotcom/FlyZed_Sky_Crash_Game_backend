@@ -21,7 +21,7 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-/* =================== INIT DB (IMPROVED) =================== */
+/* =================== INIT DB (FIXED) =================== */
 router.post("/init-db", requireAdmin, async (req, res) => {
   const db = req.app.locals.db;
   if (!db || typeof db.query !== "function") {
@@ -67,7 +67,7 @@ router.post("/init-db", requireAdmin, async (req, res) => {
     `);
     logger.info("admin.init_db.rounds_table_created");
 
-    // 3. Create bets table
+    // 3. Create bets table (FIXED - includes claimed_at)
     await db.query(`
       CREATE TABLE IF NOT EXISTS bets (
         id UUID PRIMARY KEY,
@@ -115,7 +115,7 @@ router.post("/init-db", requireAdmin, async (req, res) => {
     `);
     logger.info("admin.init_db.payments_table_created");
 
-    // 6. Create monitoring tables
+    // 6. Create monitoring_snapshots table
     await db.query(`
       CREATE TABLE IF NOT EXISTS monitoring_snapshots (
         id UUID PRIMARY KEY,
@@ -131,7 +131,7 @@ router.post("/init-db", requireAdmin, async (req, res) => {
     `);
     logger.info("admin.init_db.monitoring_snapshots_table_created");
 
-    // 7. Create kill switch log
+    // 7. Create kill_switch_log table
     await db.query(`
       CREATE TABLE IF NOT EXISTS kill_switch_log (
         id SERIAL PRIMARY KEY,
@@ -145,7 +145,7 @@ router.post("/init-db", requireAdmin, async (req, res) => {
     `);
     logger.info("admin.init_db.kill_switch_log_table_created");
 
-    // 8. Create legal compliance table
+    // 8. Create legal_compliance table
     await db.query(`
       CREATE TABLE IF NOT EXISTS legal_compliance (
         user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -160,7 +160,7 @@ router.post("/init-db", requireAdmin, async (req, res) => {
     `);
     logger.info("admin.init_db.legal_compliance_table_created");
 
-    // 9. Create self exclusion table
+    // 9. Create self_exclusion table
     await db.query(`
       CREATE TABLE IF NOT EXISTS self_exclusion (
         user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
