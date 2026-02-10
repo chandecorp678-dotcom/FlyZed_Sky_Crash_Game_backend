@@ -48,14 +48,12 @@
     .modal.show{display:flex}
     .modal-content{background:var(--panel);padding:20px;border-radius:10px;color:var(--white);width:100%;max-width:450px;max-height:90vh;overflow:auto}
     .modal h3{margin-top:0;color:var(--accent)}
-    .modal input{width:100%;margin-bottom:10px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#071a2b;color:var(--white);font-size:16px}
-    .modal input:focus{border-color:var(--accent);outline:none}
+    .modal input{width:100%;margin-bottom:10px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#071a2b;color:var(--white)}
     .modal-actions{display:flex;gap:8px;margin-top:15px}
     .modal-actions button{flex:1}
     .modal-message{margin:10px 0;padding:10px;border-radius:6px;font-size:14px;display:none}
     .modal-message.error{background:#d7263d;color:#fff;display:block}
     .modal-message.success{background:#083a1f;color:#fff;display:block}
-    .input-hint{font-size:12px;color:var(--muted);margin-top:-8px;margin-bottom:8px}
 
     .hidden{display:none !important}
     main{padding-bottom:120px}
@@ -125,16 +123,11 @@
   <div class="modal" id="loginModal">
     <div class="modal-content">
       <h3>Login</h3>
-      <label style="font-size:12px;color:var(--muted);">Phone Number</label>
-      <input id="loginPhone" type="text" placeholder="+260978554433" maxlength="15" />
-      <div class="input-hint">Format: +[country code][number]</div>
-
-      <label style="font-size:12px;color:var(--muted);margin-top:10px;">Password</label>
-      <input id="loginPassword" type="password" placeholder="Enter your password" />
-
+      <input id="loginPhone" type="text" placeholder="Phone (e.g., +260777123456)" />
+      <input id="loginPassword" type="password" placeholder="Password" />
       <div id="loginMessage" class="modal-message"></div>
       <div class="modal-actions">
-        <button class="primary" onclick="performLogin()">Login</button>
+        <button class="primary" onclick="login()">Login</button>
         <button class="btn-secondary" onclick="hideModals()">Cancel</button>
       </div>
     </div>
@@ -144,27 +137,16 @@
   <div class="modal" id="registerModal">
     <div class="modal-content">
       <h3>Register</h3>
-      
-      <label style="font-size:12px;color:var(--muted);">Full Name</label>
-      <input id="regName" type="text" placeholder="John Doe" maxlength="100" />
-      <div class="input-hint">Letters, numbers, and spaces allowed</div>
-
-      <label style="font-size:12px;color:var(--muted);margin-top:10px;">Phone Number</label>
-      <input id="regPhone" type="text" placeholder="+260978554433" maxlength="15" />
-      <div class="input-hint">Format: +[country code][number] e.g., +260978554433</div>
-
-      <label style="font-size:12px;color:var(--muted);margin-top:10px;">Password</label>
-      <input id="regPassword" type="password" placeholder="Minimum 6 characters" />
-      <div class="input-hint">At least 6 characters, any characters allowed</div>
-
-      <label style="color:var(--muted);font-size:12px;margin-top:15px;display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;">
-        <input type="checkbox" id="agreeTerms" style="margin-top:3px;cursor:pointer;" />
-        <span>I'm 18+ and agree to Terms & Conditions</span>
+      <input id="regName" type="text" placeholder="Full name" />
+      <input id="regPhone" type="text" placeholder="Phone (e.g., +260777123456)" />
+      <input id="regPassword" type="password" placeholder="Password (min 6 chars)" />
+      <label style="color:var(--muted);font-size:12px;margin-bottom:10px;display:flex;gap:8px;align-items:center;">
+        <input type="checkbox" id="agreeTerms" />
+        I'm 18+ and agree to Terms & Conditions
       </label>
-
       <div id="registerMessage" class="modal-message"></div>
       <div class="modal-actions">
-        <button class="primary" onclick="performRegister()">Register</button>
+        <button class="primary" onclick="register()">Register</button>
         <button class="btn-secondary" onclick="hideModals()">Cancel</button>
       </div>
     </div>
@@ -249,9 +231,8 @@
       document.getElementById('loginPhone').value = '';
       document.getElementById('loginPassword').value = '';
       document.getElementById('loginMessage').textContent = '';
-      document.getElementById('loginMessage').className = 'modal-message';
       loginModal.classList.add('show');
-      setTimeout(() => document.getElementById('loginPhone').focus(), 100);
+      document.getElementById('loginPhone').focus();
     }
 
     function showRegister() {
@@ -260,9 +241,8 @@
       document.getElementById('regPassword').value = '';
       document.getElementById('agreeTerms').checked = false;
       document.getElementById('registerMessage').textContent = '';
-      document.getElementById('registerMessage').className = 'modal-message';
       registerModal.classList.add('show');
-      setTimeout(() => document.getElementById('regName').focus(), 100);
+      document.getElementById('regName').focus();
     }
 
     function hideModals() {
@@ -274,149 +254,6 @@
       const el = document.getElementById(modalId);
       el.textContent = message;
       el.className = `modal-message ${isError ? 'error' : 'success'}`;
-    }
-
-    // ===== VALIDATION FUNCTIONS =====
-    function validateFullName(name) {
-      if (!name || name.length === 0) {
-        return 'Full name is required';
-      }
-      if (name.length < 2) {
-        return 'Full name must be at least 2 characters';
-      }
-      if (name.length > 100) {
-        return 'Full name must not exceed 100 characters';
-      }
-      return null; // Valid
-    }
-
-    function validatePhone(phone) {
-      if (!phone || phone.length === 0) {
-        return 'Phone number is required';
-      }
-      if (!phone.startsWith('+')) {
-        return 'Phone must start with + (e.g., +260978554433)';
-      }
-      if (!/^\+\d{7,14}$/.test(phone)) {
-        return 'Phone format invalid. Use +[country code][number] (e.g., +260978554433)';
-      }
-      return null; // Valid
-    }
-
-    function validatePassword(password) {
-      if (!password || password.length === 0) {
-        return 'Password is required';
-      }
-      if (password.length < 6) {
-        return 'Password must be at least 6 characters';
-      }
-      return null; // Valid
-    }
-
-    function validateTerms(agreed) {
-      if (!agreed) {
-        return 'You must agree to Terms & Conditions';
-      }
-      return null; // Valid
-    }
-
-    // ===== AUTH FUNCTIONS =====
-    async function performRegister() {
-      const name = document.getElementById('regName').value.trim();
-      const phone = document.getElementById('regPhone').value.trim();
-      const password = document.getElementById('regPassword').value.trim();
-      const agreed = document.getElementById('agreeTerms').checked;
-
-      console.log('Register attempt:', { name, phone, password: '***', agreed });
-
-      // Validate each field
-      let error = validateFullName(name);
-      if (error) {
-        showMessage('registerMessage', error, true);
-        return;
-      }
-
-      error = validatePhone(phone);
-      if (error) {
-        showMessage('registerMessage', error, true);
-        return;
-      }
-
-      error = validatePassword(password);
-      if (error) {
-        showMessage('registerMessage', error, true);
-        return;
-      }
-
-      error = validateTerms(agreed);
-      if (error) {
-        showMessage('registerMessage', error, true);
-        return;
-      }
-
-      try {
-        const data = await apiFetch('/auth/register', {
-          method: 'POST',
-          body: { username: name, phone: phone, password: password }
-        }, false);
-
-        localStorage.setItem(TOKEN_KEY, data.token);
-        currentUser = data.user;
-        authMode = 'server';
-        updateUI();
-
-        showMessage('registerMessage', 'Registration successful!', false);
-        setTimeout(hideModals, 1000);
-      } catch (err) {
-        console.error('Register error:', err);
-        showMessage('registerMessage', err.message || 'Registration failed', true);
-      }
-    }
-
-    async function performLogin() {
-      const phone = document.getElementById('loginPhone').value.trim();
-      const password = document.getElementById('loginPassword').value.trim();
-
-      console.log('Login attempt:', { phone, password: '***' });
-
-      // Validate fields
-      let error = validatePhone(phone);
-      if (error) {
-        showMessage('loginMessage', error, true);
-        return;
-      }
-
-      error = validatePassword(password);
-      if (error) {
-        showMessage('loginMessage', error, true);
-        return;
-      }
-
-      try {
-        const data = await apiFetch('/auth/login', {
-          method: 'POST',
-          body: { phone: phone, password: password }
-        }, false);
-
-        localStorage.setItem(TOKEN_KEY, data.token);
-        currentUser = data.user;
-        authMode = 'server';
-        updateUI();
-
-        showMessage('loginMessage', 'Login successful!', false);
-        setTimeout(hideModals, 1000);
-      } catch (err) {
-        console.error('Login error:', err);
-        showMessage('loginMessage', err.message || 'Login failed', true);
-      }
-    }
-
-    function logout() {
-      localStorage.removeItem(TOKEN_KEY);
-      currentUser = null;
-      authMode = null;
-      guestBalance = 10;
-      updateUI();
     }
 
     // ===== ROUND STATUS POLLING =====
@@ -464,6 +301,109 @@
     }
 
     statusPoller = setInterval(pollRoundStatus, 250);
+
+    // ===== AUTH FUNCTIONS - FIXED =====
+    async function register() {
+      const name = document.getElementById('regName').value.trim();
+      const phone = document.getElementById('regPhone').value.trim();
+      const password = document.getElementById('regPassword').value.trim();
+      const agreed = document.getElementById('agreeTerms').checked;
+
+      console.log('Register values:', { name, phone, password: '***', agreed });
+
+      // Validate
+      if (!name || name.length === 0) {
+        showMessage('registerMessage', 'Full name is required', true);
+        return;
+      }
+
+      if (name.length < 2) {
+        showMessage('registerMessage', 'Name must be at least 2 characters', true);
+        return;
+      }
+
+      if (!phone || phone.length === 0) {
+        showMessage('registerMessage', 'Phone number is required', true);
+        return;
+      }
+
+      if (!password || password.length === 0) {
+        showMessage('registerMessage', 'Password is required', true);
+        return;
+      }
+
+      if (password.length < 6) {
+        showMessage('registerMessage', 'Password must be at least 6 characters', true);
+        return;
+      }
+
+      if (!agreed) {
+        showMessage('registerMessage', 'You must agree to Terms & Conditions', true);
+        return;
+      }
+
+      try {
+        const data = await apiFetch('/auth/register', {
+          method: 'POST',
+          body: { username: name, phone: phone, password: password }
+        }, false);
+
+        localStorage.setItem(TOKEN_KEY, data.token);
+        currentUser = data.user;
+        authMode = 'server';
+        updateUI();
+
+        showMessage('registerMessage', 'Registration successful!', false);
+        setTimeout(hideModals, 1000);
+      } catch (err) {
+        console.error('Register error:', err);
+        showMessage('registerMessage', err.message || 'Registration failed', true);
+      }
+    }
+
+    async function login() {
+      const phone = document.getElementById('loginPhone').value.trim();
+      const password = document.getElementById('loginPassword').value.trim();
+
+      console.log('Login values:', { phone, password: '***' });
+
+      // Validate
+      if (!phone || phone.length === 0) {
+        showMessage('loginMessage', 'Phone number is required', true);
+        return;
+      }
+
+      if (!password || password.length === 0) {
+        showMessage('loginMessage', 'Password is required', true);
+        return;
+      }
+
+      try {
+        const data = await apiFetch('/auth/login', {
+          method: 'POST',
+          body: { phone: phone, password: password }
+        }, false);
+
+        localStorage.setItem(TOKEN_KEY, data.token);
+        currentUser = data.user;
+        authMode = 'server';
+        updateUI();
+
+        showMessage('loginMessage', 'Login successful!', false);
+        setTimeout(hideModals, 1000);
+      } catch (err) {
+        console.error('Login error:', err);
+        showMessage('loginMessage', err.message || 'Login failed', true);
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem(TOKEN_KEY);
+      currentUser = null;
+      authMode = null;
+      guestBalance = 10;
+      updateUI();
+    }
 
     // ===== GAME =====
     async function startGame() {
