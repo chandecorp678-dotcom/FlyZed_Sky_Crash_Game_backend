@@ -327,6 +327,155 @@ router.post("/bets/:betId/mark-refunded", requireAdmin, async (req, res) => {
   }
 });
 
+/* =============== ADMIN: PAYMENTS (Phase 9.3) =============== */
+
+/**
+ * GET /api/admin/payments
+ * List all payments with filters
+ */
+router.get("/payments", requireAdmin, async (req, res) => {
+  const db = req.app.locals.db;
+  try {
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const type = req.query.type; // 'deposit' or 'withdraw'
+    const status = req.query.status; // 'pending', 'completed', 'failed'
+
+    let query = `SELECT id, user_id, type, amount, phone, mtn_transaction_id, status, mtn_status, created_at, updated_at FROM payments WHERE 1=1`;
+    const params = [];
+
+    if (type) {
+      params.push(type);
+      query += ` AND type = $${params.length}`;
+    }
+    if (status) {
+      params.push(status);
+      query += ` AND status = $${params.length}`;
+    }
+
+    query += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+
+    const q = await db.query(query, params);
+    return res.json({ payments: q.rows || [] });
+  } catch (err) {
+    logger.error("admin.payments.list.error", { message: err && err.message ? err.message : String(err) });
+    return sendError(res, 500, "Server error");
+  }
+});
+
+/**
+ * GET /api/admin/payments/:paymentId
+ * Get single payment details with audit history
+ */
+router.get("/payments/:paymentId", requireAdmin, async (req, res) => {
+  const db = req.app.locals.db;
+  const paymentId = req.params.paymentId;
+
+  try {
+    const pRes = await db.query(
+      `SELECT id, user_id, type, amount, phone, mtn_transaction_id, status, mtn_status, error_reason, created_at, updated_at 
+       FROM payments WHERE id = $1`,
+      [paymentId]
+    );
+
+    if (!pRes.rowCount) return sendError(res, 404, "Payment not found");
+
+    const aRes = await db.query(
+      `SELECT old_status, new_status, reason, changed_at FROM payment_audit WHERE payment_id = $1 ORDER BY changed_at DESC`,
+      [paymentId]
+    );
+
+    return res.json({
+      payment: pRes.rows[0],
+      audit: aRes.rows || []
+    });
+  } catch (err) {
+    logger.error("admin.payments.detail.error", { message: err && err.message ? err.message : String(err) });
+    return sendError(res, 500, "Server error");
+  }
+});
+
+/**
+ * POST /api/admin/payments/:paymentId/refund
+ * Manually refund a failed/expired withdrawal
+ */
+router.post("/payments/:paymentId/refund", requireAdmin, async (req, res) => {
+  const db = req.app.locals.db;
+  const paymentId = req.params.paymentId;
+
+  try {
+    const result = await runTransaction(db, async (client) => {
+      const pRes = await client.query(
+        `SELECT id, user_id, type, amount, status FROM payments WHERE id = $1 FOR UPDATE`,
+        [paymentId]
+      );
+
+      if (!pRes.rowCount) {
+        const e = new Error("Payment not found");
+        e.status = 404;
+        throw e;
+      }
+
+      const payment = pRes.rows[0];
+
+      // Only refund withdrawals that failed
+      if (payment.type !== 'withdraw' || payment.status === 'completed') {
+        const e = new Error("Can only refund failed withdrawals");
+        e.status = 400;
+        throw e;
+      }
+
+      // Credit user
+      await client.query(
+        `UPDATE users SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+        [payment.amount, payment.user_id]
+      );
+
+      // Mark as refunded
+      await client.query(
+        `UPDATE payments SET status = 'refunded', updated_at = NOW() WHERE id = $1`,
+        [paymentId]
+      );
+
+      return { paymentId, amount: payment.amount, userId: payment.user_id };
+    });
+
+    logger.info('admin.payment.refund.success', { paymentId, amount: result.amount, userId: result.userId });
+    return res.json({ ok: true, message: "Payment refunded", ...result });
+  } catch (err) {
+    if (err.status) return sendError(res, err.status, err.message);
+    logger.error("admin.payment.refund.error", { message: err && err.message ? err.message : String(err) });
+    return sendError(res, 500, "Refund failed");
+  }
+});
+
+/**
+ * GET /api/admin/payments/stats/summary
+ * Payment statistics
+ */
+router.get("/payments/stats/summary", requireAdmin, async (req, res) => {
+  const db = req.app.locals.db;
+  try {
+    const stats = await db.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE type = 'deposit') as total_deposits,
+        SUM(amount) FILTER (WHERE type = 'deposit') as total_deposit_volume,
+        COUNT(*) FILTER (WHERE type = 'deposit' AND status = 'completed') as completed_deposits,
+        COUNT(*) FILTER (WHERE type = 'withdraw') as total_withdrawals,
+        SUM(amount) FILTER (WHERE type = 'withdraw') as total_withdrawal_volume,
+        COUNT(*) FILTER (WHERE type = 'withdraw' AND status = 'completed') as completed_withdrawals,
+        COUNT(*) FILTER (WHERE status = 'pending' OR status = 'processing') as pending_count
+      FROM payments
+    `);
+
+    return res.json({ ok: true, stats: stats.rows[0] || {} });
+  } catch (err) {
+    logger.error("admin.payments.stats.error", { message: err && err.message ? err.message : String(err) });
+    return sendError(res, 500, "Server error");
+  }
+});
+
 // Final log to confirm admin routes loaded successfully
 logger.info("admin.routes.loaded", { ts: new Date().toISOString() });
 
