@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const logger = require("./logger");
 const { runTransaction } = require("./dbHelper");
 const metrics = require("./metrics");
+const legalCompliance = require("./legalCompliance");
 
 const {
   joinRound,
@@ -53,6 +54,31 @@ const pruneInterval = setInterval(() => {
 }, CASHOUT_PRUNE_INTERVAL_MS);
 if (typeof pruneInterval.unref === 'function') pruneInterval.unref();
 
+// Phase 11: Check legal compliance middleware
+async function checkCompliance(req, res, next) {
+  if (!req.user || req.user.guest) {
+    return next();
+  }
+
+  const db = req.app.locals.db;
+  try {
+    // Check if user is self-excluded
+    const exclusion = await legalCompliance.isUserExcluded(db, req.user.id);
+    if (exclusion && exclusion.excluded) {
+      return res.status(403).json({
+        error: `You are self-excluded until ${new Date(exclusion.excludedUntil).toLocaleString()}. Contact support to appeal.`
+      });
+    }
+
+    next();
+  } catch (err) {
+    logger.warn('game.checkCompliance.error', { message: err.message });
+    next();
+  }
+}
+
+router.use(checkCompliance);
+
 // ---------------- START ROUND (place bet and join global round) ----------------
 router.post("/start", json, async (req, res) => {
   const db = req.app.locals.db;
@@ -64,6 +90,14 @@ router.post("/start", json, async (req, res) => {
   const user = req.user;
   if (!user || user.guest) {
     return res.status(401).json({ error: "You must be logged in to place a bet" });
+  }
+
+  // Phase 11: Check daily loss limit
+  const limitStatus = await legalCompliance.checkDailyLossLimit(db, user.id);
+  if (limitStatus && limitStatus.limitExceeded) {
+    return res.status(403).json({
+      error: `Daily loss limit exceeded. You have reached ZMW ${legalCompliance.DAILY_LOSS_LIMIT} in losses today. Please try again tomorrow.`
+    });
   }
 
   // Phase 9.2: Sanitize bet amount
