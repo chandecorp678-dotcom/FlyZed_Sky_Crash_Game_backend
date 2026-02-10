@@ -11,6 +11,8 @@ const { initDb, pool } = require("./db");
 const routes = require("./routes");
 const gameEngine = require("./gameEngine");
 const { sendError } = require("./apiResponses");
+const monitoring = require("./monitoring");
+const killSwitch = require("./killSwitch");
 
 const app = express();
 
@@ -26,6 +28,7 @@ function validateEnv() {
 
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 15000);
 const BROADCAST_INTERVAL_MS = Number(process.env.BROADCAST_INTERVAL_MS || 100); // default 100ms
+const MONITORING_INTERVAL_MS = Number(process.env.MONITORING_INTERVAL_MS || 300000); // 5 minutes
 
 app.use((req, res, next) => {
   logger.info('http.request.start', { method: req.method, url: req.originalUrl, ip: req.ip });
@@ -168,6 +171,23 @@ function stopBroadcastLoop() {
   try { if (broadcastTimer) { clearInterval(broadcastTimer); broadcastTimer = null; } } catch (e) {}
 }
 
+/* =================== Monitoring loop (Phase 10) =================== */
+let monitoringTimer = null;
+function startMonitoringLoop(db) {
+  if (monitoringTimer) return;
+  monitoringTimer = setInterval(async () => {
+    try {
+      await monitoring.storeMonitoringSnapshot(db);
+    } catch (e) {
+      logger.warn('monitoring.loop.error', { message: e && e.message ? e.message : String(e) });
+    }
+  }, MONITORING_INTERVAL_MS);
+  if (monitoringTimer && typeof monitoringTimer.unref === 'function') monitoringTimer.unref();
+}
+function stopMonitoringLoop() {
+  try { if (monitoringTimer) { clearInterval(monitoringTimer); monitoringTimer = null; } } catch (e) {}
+}
+
 /* =================== Engine event attachments (use safeEmit) =================== */
 function attachEngineListeners(db) {
   const emitter = gameEngine.emitter;
@@ -229,6 +249,9 @@ async function start() {
     await initDb();
     app.locals.db = pool;
 
+    // Phase 10: Initialize kill switch
+    await killSwitch.initialize(pool);
+
     try { await ensureNextCommitExists(pool); } catch (e) { logger.warn('start.ensureNextCommit_failed', { message: e && e.message ? e.message : String(e) }); }
 
     try {
@@ -249,14 +272,15 @@ async function start() {
     try {
       gameEngine.startEngine();
       startBroadcastLoop();
-      logger.info('gameEngine.started_and_broadcast_loop_running', { intervalMs: BROADCAST_INTERVAL_MS });
+      startMonitoringLoop(pool);
+      logger.info('gameEngine.started_and_broadcast_loop_running', { intervalMs: BROADCAST_INTERVAL_MS, monitoringIntervalMs: MONITORING_INTERVAL_MS });
     } catch (e) {
       logger.error('gameEngine.start_failed', { message: e && e.message ? e.message : String(e) });
     }
 
     const PORT = process.env.PORT || 3000;
     httpServer.listen(PORT, () => {
-      logger.info("server.started", { port: PORT, broadcast_interval_ms: BROADCAST_INTERVAL_MS });
+      logger.info("server.started", { port: PORT, broadcast_interval_ms: BROADCAST_INTERVAL_MS, monitoring_interval_ms: MONITORING_INTERVAL_MS });
       if (!socketAvailable) {
         logger.warn('server.running_without_socketio', { message: 'Socket.IO not available; realtime disabled until dependency installed.' });
       }
@@ -345,6 +369,7 @@ async function gracefulShutdown(reason = 'signal') {
   logger.info('shutdown.start', { reason });
   try {
     stopBroadcastLoop();
+    stopMonitoringLoop();
     try { gameEngine.dispose(); } catch (e) {}
     try {
       await new Promise((resolve) => {
