@@ -172,6 +172,7 @@
     const registerBtn = document.getElementById('registerBtn');
     const logoutBtn = document.getElementById('logoutBtn');
 
+    // ✅ FIXED apiFetch function
     async function apiFetch(path, opts = {}, withAuth = true) {
       const url = API_BASE + path;
       const headers = opts.headers || {};
@@ -181,13 +182,24 @@
         if (token) headers['Authorization'] = 'Bearer ' + token;
       }
 
-      if (opts.body && typeof opts.body === 'object') {
-        opts.body = JSON.stringify(opts.body);
-        opts.headers = { ...opts.headers, 'Content-Type': 'application/json' };
+      // ✅ FIX: Create a new object for body, don't reuse opts.body
+      let body = null;
+      if (opts.body) {
+        if (typeof opts.body === 'object') {
+          body = JSON.stringify(opts.body);
+          headers['Content-Type'] = 'application/json';
+        } else {
+          body = opts.body;
+        }
       }
 
       try {
-        const res = await fetch(url, { ...opts, headers });
+        const res = await fetch(url, { 
+          method: opts.method || 'GET',
+          headers: headers,
+          body: body
+        });
+        
         const text = await res.text();
         let json = null;
 
@@ -303,7 +315,6 @@
       try {
         const data = await apiFetch('/auth/register', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: { username, phone, password }
         }, false);
 
@@ -329,7 +340,6 @@
       try {
         const data = await apiFetch('/auth/login', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: { phone, password }
         }, false);
 
@@ -430,12 +440,14 @@
       }
     }
 
-    // ============ DEPOSIT - FINAL FIX ============
+    // ============ DEPOSIT ============
     async function deposit() {
       const amountStr = prompt('Enter deposit amount:');
       if (!amountStr) return;
       
       const amount = Number(amountStr);
+      
+      console.log('🔍 Deposit:', { amountStr, amount, authMode });
       
       if (isNaN(amount) || amount <= 0) {
         alert('Enter a valid amount greater than 0');
@@ -450,42 +462,46 @@
       }
 
       try {
+        console.log('📤 Sending deposit request with amount:', amount);
         const responseData = await apiFetch('/users/deposit', {
           method: 'POST',
           body: { amount: amount }
         }, true);
+
+        console.log('📥 Response:', responseData);
 
         if (!responseData) {
           alert('No data returned from server');
           return;
         }
 
-        // Update currentUser with response - convert balance to number
         currentUser = {
           id: responseData.id,
           username: responseData.username,
           phone: responseData.phone,
-          balance: Number(responseData.balance) || 0,  // ✅ Ensure it's a number
+          balance: Number(responseData.balance) || 0,
           freeRounds: Number(responseData.freeRounds || responseData.freerounds) || 0,
           createdAt: responseData.createdAt,
           updatedAt: responseData.updatedAt
         };
 
-        console.log('✅ currentUser after deposit:', currentUser);
+        console.log('✅ currentUser updated:', currentUser);
         updateUI();
         alert('Deposit successful! New balance: K ' + currentUser.balance.toFixed(2));
       } catch (err) {
-        console.error('Deposit error:', err);
+        console.error('❌ Deposit error:', err);
         alert('Deposit failed: ' + err.message);
       }
     }
 
-    // ============ WITHDRAW - FINAL FIX ============
+    // ============ WITHDRAW ============
     async function withdraw() {
       const amountStr = prompt('Enter withdrawal amount:');
       if (!amountStr) return;
       
       const amount = Number(amountStr);
+      
+      console.log('🔍 Withdraw:', { amountStr, amount, authMode });
       
       if (isNaN(amount) || amount <= 0) {
         alert('Enter a valid amount greater than 0');
@@ -504,32 +520,34 @@
       }
 
       try {
+        console.log('📤 Sending withdraw request with amount:', amount);
         const responseData = await apiFetch('/users/withdraw', {
           method: 'POST',
           body: { amount: amount }
         }, true);
+
+        console.log('📥 Response:', responseData);
 
         if (!responseData) {
           alert('No data returned from server');
           return;
         }
 
-        // Update currentUser with response - convert balance to number
         currentUser = {
           id: responseData.id,
           username: responseData.username,
           phone: responseData.phone,
-          balance: Number(responseData.balance) || 0,  // ✅ Ensure it's a number
+          balance: Number(responseData.balance) || 0,
           freeRounds: Number(responseData.freeRounds || responseData.freerounds) || 0,
           createdAt: responseData.createdAt,
           updatedAt: responseData.updatedAt
         };
 
-        console.log('✅ currentUser after withdraw:', currentUser);
+        console.log('✅ currentUser updated:', currentUser);
         updateUI();
         alert('Withdrawal successful! New balance: K ' + currentUser.balance.toFixed(2));
       } catch (err) {
-        console.error('Withdraw error:', err);
+        console.error('❌ Withdraw error:', err);
         alert('Withdrawal failed: ' + err.message);
       }
     }
