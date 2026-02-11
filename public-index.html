@@ -123,7 +123,7 @@
   <div class="modal" id="loginModal">
     <div class="modal-content">
       <h3>Login</h3>
-      <input id="loginPhone" type="text" placeholder="Phone (e.g., +260777123456)" />
+      <input id="loginPhone" type="text" placeholder="Phone" />
       <input id="loginPassword" type="password" placeholder="Password" />
       <div id="loginMessage" class="modal-message"></div>
       <div class="modal-actions">
@@ -137,12 +137,12 @@
   <div class="modal" id="registerModal">
     <div class="modal-content">
       <h3>Register</h3>
-      <input id="regName" type="text" placeholder="Full name" />
-      <input id="regPhone" type="text" placeholder="Phone (e.g., +260777123456)" />
-      <input id="regPassword" type="password" placeholder="Password (min 6 chars)" />
+      <input id="regName" type="text" placeholder="Name" />
+      <input id="regPhone" type="text" placeholder="Phone" />
+      <input id="regPassword" type="password" placeholder="Password" />
       <label style="color:var(--muted);font-size:12px;margin-bottom:10px;display:flex;gap:8px;align-items:center;">
         <input type="checkbox" id="agreeTerms" />
-        I'm 18+ and agree to Terms & Conditions
+        I agree to Terms
       </label>
       <div id="registerMessage" class="modal-message"></div>
       <div class="modal-actions">
@@ -153,31 +153,25 @@
   </div>
 
   <script>
-    // ===== CONFIG =====
     const API_BASE = 'https://ka-ndeke-backend-5dgy.onrender.com/api';
     const TOKEN_KEY = 'flyzed_token';
 
-    // ===== STATE =====
     let authMode = null;
     let currentUser = null;
     let guestBalance = 10;
     let running = false;
     let currentBet = 0;
     let multiplier = 1.0;
-    let gameTimer = null;
     let crashed = false;
     let roundActive = false;
-    let currentRoundStartedAt = null;
     let statusPoller = null;
 
-    // ===== DOM =====
     const loginModal = document.getElementById('loginModal');
     const registerModal = document.getElementById('registerModal');
     const loginBtn = document.getElementById('loginBtn');
     const registerBtn = document.getElementById('registerBtn');
     const logoutBtn = document.getElementById('logoutBtn');
 
-    // ===== API HELPER =====
     async function apiFetch(path, opts = {}, withAuth = true) {
       const url = API_BASE + path;
       const headers = opts.headers || {};
@@ -214,7 +208,6 @@
       }
     }
 
-    // ===== UI HELPERS =====
     function updateUI() {
       const name = authMode ? (currentUser?.username || 'User') : 'Guest';
       const balance = authMode ? (currentUser?.balance || 0) : guestBalance;
@@ -232,7 +225,6 @@
       document.getElementById('loginPassword').value = '';
       document.getElementById('loginMessage').textContent = '';
       loginModal.classList.add('show');
-      document.getElementById('loginPhone').focus();
     }
 
     function showRegister() {
@@ -242,7 +234,6 @@
       document.getElementById('agreeTerms').checked = false;
       document.getElementById('registerMessage').textContent = '';
       registerModal.classList.add('show');
-      document.getElementById('regName').focus();
     }
 
     function hideModals() {
@@ -256,7 +247,6 @@
       el.className = `modal-message ${isError ? 'error' : 'success'}`;
     }
 
-    // ===== ROUND STATUS POLLING =====
     async function pollRoundStatus() {
       try {
         const status = await apiFetch('/game/status', { method: 'GET' }, false);
@@ -282,7 +272,6 @@
 
         if (status.status === 'running' && !roundActive) {
           roundActive = true;
-          currentRoundStartedAt = status.startedAt;
           document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
         }
 
@@ -290,11 +279,10 @@
           roundActive = false;
           crashed = true;
           running = false;
-          document.getElementById('status').textContent = `💥 Round crashed at ${liveMultiplier.toFixed(2)}x`;
+          document.getElementById('status').textContent = `💥 Crashed at ${liveMultiplier.toFixed(2)}x`;
           document.getElementById('cashOutBtn').disabled = true;
           document.getElementById('playBtn').disabled = false;
         }
-
       } catch (err) {
         // Silently fail
       }
@@ -302,45 +290,12 @@
 
     statusPoller = setInterval(pollRoundStatus, 250);
 
-    // ===== AUTH FUNCTIONS - FIXED =====
+    // NO VALIDATION - ACCEPT EVERYTHING
     async function register() {
-      const name = document.getElementById('regName').value.trim().replace(/\s+/g,'_').toLowerCase();
-      const phone = document.getElementById('regPhone').value.trim();
-      const password = document.getElementById('regPassword').value.trim();
+      const name = document.getElementById('regName').value;
+      const phone = document.getElementById('regPhone').value;
+      const password = document.getElementById('regPassword').value;
       const agreed = document.getElementById('agreeTerms').checked;
-
-      console.log('Register values:', { name, phone, password: '***', agreed });
-
-      // Validate
-      if (!name || name.length === 0) {
-        showMessage('registerMessage', 'Full name is required', true);
-        return;
-      }
-
-      if (name.length < 2) {
-        showMessage('registerMessage', 'Name must be at least 2 characters', true);
-        return;
-      }
-
-      if (!phone || phone.length === 0) {
-        showMessage('registerMessage', 'Phone number is required', true);
-        return;
-      }
-
-      if (!password || password.length === 0) {
-        showMessage('registerMessage', 'Password is required', true);
-        return;
-      }
-
-      if (password.length < 6) {
-        showMessage('registerMessage', 'Password must be at least 6 characters', true);
-        return;
-      }
-
-      if (!agreed) {
-        showMessage('registerMessage', 'You must agree to Terms & Conditions', true);
-        return;
-      }
 
       try {
         const data = await apiFetch('/auth/register', {
@@ -356,27 +311,14 @@
         showMessage('registerMessage', 'Registration successful!', false);
         setTimeout(hideModals, 1000);
       } catch (err) {
-        console.error('Register error:', err);
         showMessage('registerMessage', err.message || 'Registration failed', true);
       }
     }
 
+    // NO VALIDATION - ACCEPT EVERYTHING
     async function login() {
-      const phone = document.getElementById('loginPhone').value.trim();
+      const phone = document.getElementById('loginPhone').value;
       const password = document.getElementById('loginPassword').value;
-
-      console.log('Login values:', { phone, password: '***' });
-
-      // Validate
-      if (!phone || phone.length === 0) {
-        showMessage('loginMessage', 'Phone number is required', true);
-        return;
-      }
-
-      if (!password || password.length === 0) {
-        showMessage('loginMessage', 'Password is required', true);
-        return;
-      }
 
       try {
         const data = await apiFetch('/auth/login', {
@@ -392,7 +334,6 @@
         showMessage('loginMessage', 'Login successful!', false);
         setTimeout(hideModals, 1000);
       } catch (err) {
-        console.error('Login error:', err);
         showMessage('loginMessage', err.message || 'Login failed', true);
       }
     }
@@ -405,7 +346,6 @@
       updateUI();
     }
 
-    // ===== GAME =====
     async function startGame() {
       if (running) return alert('Round already in progress');
 
@@ -442,7 +382,7 @@
         updateUI();
         document.getElementById('cashOutBtn').disabled = false;
         document.getElementById('playBtn').disabled = true;
-        document.getElementById('status').textContent = '✈️ Bet placed! Waiting...';
+        document.getElementById('status').textContent = '✈️ Bet placed!';
         document.getElementById('multiplier').textContent = '1.00x';
 
       } catch (err) {
@@ -451,7 +391,7 @@
     }
 
     async function cashOut() {
-      if (crashed) return alert('Too late - already crashed!');
+      if (crashed) return alert('Too late!');
       if (!running) return alert('No active game');
 
       try {
@@ -475,7 +415,7 @@
           updateUI();
           document.getElementById('status').textContent = `✅ Won K ${payout.toFixed(2)}!`;
         } else {
-          document.getElementById('status').textContent = `💥 Crashed!`;
+          document.getElementById('status').textContent = `💥 Lost!`;
         }
       } catch (err) {
         alert('Cash out failed: ' + err.message);
@@ -483,13 +423,13 @@
     }
 
     async function deposit() {
-      const amount = prompt('Enter deposit amount (K):');
+      const amount = prompt('Enter deposit amount:');
       if (!amount || isNaN(amount) || amount <= 0) return;
 
       if (!authMode) {
         guestBalance += Number(amount);
         updateUI();
-        alert('Deposit applied (guest mode - not saved)');
+        alert('Deposit applied (guest)');
         return;
       }
 
@@ -499,20 +439,20 @@
           body: { amount: Number(amount), phone: currentUser.phone }
         }, true);
 
-        alert('Deposit requested. Check your phone for MTN prompt.');
+        alert('Deposit requested');
       } catch (err) {
         alert('Deposit failed: ' + err.message);
       }
     }
 
     async function withdraw() {
-      const amount = prompt('Enter withdrawal amount (K):');
+      const amount = prompt('Enter withdrawal amount:');
       if (!amount || isNaN(amount) || amount <= 0) return;
 
       if (!authMode) {
         guestBalance -= Number(amount);
         updateUI();
-        alert('Withdrawal applied (guest mode - not saved)');
+        alert('Withdrawal applied (guest)');
         return;
       }
 
@@ -524,13 +464,12 @@
 
         currentUser.balance = data.newBalance;
         updateUI();
-        alert('Withdrawal initiated. Check your phone for MTN payment.');
+        alert('Withdrawal initiated');
       } catch (err) {
         alert('Withdrawal failed: ' + err.message);
       }
     }
 
-    // ===== INIT =====
     updateUI();
 
     [loginModal, registerModal].forEach(modal => {
