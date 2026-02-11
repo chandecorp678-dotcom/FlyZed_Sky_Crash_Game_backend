@@ -62,7 +62,7 @@ router.post("/game/payout", express.json(), (req, res) => {
   }
 });
 
-// REGISTER - BALANCED: Not too strict, but checks for duplicates
+// REGISTER
 router.post("/auth/register", 
   registerLimiter.middleware({
     keyFn: (req) => req.ip,
@@ -73,7 +73,6 @@ router.post("/auth/register",
     const db = req.app.locals.db;
     const { username, phone, password } = req.body || {};
 
-    // Basic checks - not too strict
     if (!phone || String(phone).trim().length === 0) {
       return sendError(res, 400, "Phone number is required");
     }
@@ -91,7 +90,6 @@ router.post("/auth/register",
     const trimmedPassword = String(password).trim();
 
     try {
-      // CHECK IF PHONE ALREADY EXISTS
       const existing = await db.query("SELECT id FROM users WHERE phone = $1", [trimmedPhone]);
       if (existing.rows.length > 0) {
         return sendError(res, 409, "Phone number already registered");
@@ -117,7 +115,6 @@ router.post("/auth/register",
     } catch (err) {
       logger.error('auth.register.error', { message: err && err.message ? err.message : String(err) });
       
-      // Check if it's a unique constraint violation
       if (err.code === '23505') {
         return sendError(res, 409, "Phone number already registered");
       }
@@ -127,7 +124,7 @@ router.post("/auth/register",
   })
 );
 
-// LOGIN - STANDARD: Check if user exists and password matches
+// LOGIN
 router.post("/auth/login",
   loginLimiter.middleware({
     keyFn: (req) => req.ip,
@@ -138,7 +135,6 @@ router.post("/auth/login",
     const db = req.app.locals.db;
     const { phone, password } = req.body || {};
 
-    // Check required fields
     if (!phone || String(phone).trim().length === 0) {
       return sendError(res, 400, "Phone number is required");
     }
@@ -151,24 +147,20 @@ router.post("/auth/login",
     const trimmedPassword = String(password).trim();
 
     try {
-      // QUERY DATABASE FOR USER
       const rowRes = await db.query("SELECT * FROM users WHERE phone = $1", [trimmedPhone]);
       const row = rowRes.rows[0];
       
-      // USER NOT FOUND
       if (!row) {
         logger.warn('auth.login.user_not_found', { phone: trimmedPhone });
         return sendError(res, 401, "Invalid phone or password");
       }
 
-      // VERIFY PASSWORD
       const ok = await bcrypt.compare(trimmedPassword, row.password_hash || "");
       if (!ok) {
         logger.warn('auth.login.invalid_password', { phone: trimmedPhone });
         return sendError(res, 401, "Invalid phone or password");
       }
 
-      // PASSWORD CORRECT - GENERATE TOKEN
       const user = sanitizeUser(row);
       const token = jwt.sign({ uid: row.id }, JWT_SECRET, { expiresIn: "30d" });
 
@@ -239,27 +231,35 @@ const changeBalanceHandler = wrapAsync(async (req, res) => {
 
 router.post("/users/balance/change", requireAuth, express.json(), changeBalanceHandler);
 
-// DEPOSIT - FLEXIBLE: Accept amounts > 0
+// DEPOSIT - FIXED
 router.post("/users/deposit", requireAuth, express.json(), wrapAsync(async (req, res) => {
-  const amount = Number(req.body?.amount);
+  const amount = req.body?.amount;
   
-  if (!amount || isNaN(amount) || amount <= 0) {
+  const numAmount = Number(amount);
+  
+  logger.info('deposit.attempt', { rawAmount: amount, numAmount, isNaN: isNaN(numAmount) });
+
+  if (isNaN(numAmount) || numAmount <= 0) {
     return sendError(res, 400, "Deposit amount must be greater than 0");
   }
   
-  req.body = { delta: amount };
+  req.body = { delta: numAmount };
   return changeBalanceHandler(req, res);
 }));
 
-// WITHDRAW - FLEXIBLE: Accept amounts > 0
+// WITHDRAW - FIXED
 router.post("/users/withdraw", requireAuth, express.json(), wrapAsync(async (req, res) => {
-  const amount = Number(req.body?.amount);
+  const amount = req.body?.amount;
   
-  if (!amount || isNaN(amount) || amount <= 0) {
+  const numAmount = Number(amount);
+  
+  logger.info('withdraw.attempt', { rawAmount: amount, numAmount, isNaN: isNaN(numAmount) });
+
+  if (isNaN(numAmount) || numAmount <= 0) {
     return sendError(res, 400, "Withdraw amount must be greater than 0");
   }
   
-  req.body = { delta: -Math.abs(amount) };
+  req.body = { delta: -Math.abs(numAmount) };
   return changeBalanceHandler(req, res);
 }));
 
