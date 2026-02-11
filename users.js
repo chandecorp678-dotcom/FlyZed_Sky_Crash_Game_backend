@@ -62,7 +62,7 @@ router.post("/game/payout", express.json(), (req, res) => {
   }
 });
 
-// REGISTER - NO VALIDATION
+// REGISTER - FIXED: Use provided username
 router.post("/auth/register", 
   registerLimiter.middleware({
     keyFn: (req) => req.ip,
@@ -78,17 +78,20 @@ router.post("/auth/register",
     const password_hash = await bcrypt.hash(password || "", 10);
 
     try {
+      // Use provided username, not default "user"
+      const finalUsername = username && String(username).trim().length > 0 ? String(username).trim() : "user_" + Math.random().toString(36).substring(7);
+
       await db.query(
         `INSERT INTO users (id, username, phone, password_hash, balance, freerounds, createdat, updatedat)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [id, username || "user", phone || "", password_hash, 0, 0, now, now]
+        [id, finalUsername, phone || "", password_hash, 0, 0, now, now]
       );
 
       const userRow = await db.query("SELECT * FROM users WHERE id = $1", [id]);
       const user = sanitizeUser(userRow.rows[0]);
       const token = jwt.sign({ uid: id }, JWT_SECRET, { expiresIn: "30d" });
 
-      logger.info('auth.register.success', { userId: id, phone });
+      logger.info('auth.register.success', { userId: id, username: finalUsername, phone });
 
       return res.status(201).json({ token, user });
     } catch (err) {
@@ -193,14 +196,20 @@ const changeBalanceHandler = wrapAsync(async (req, res) => {
 
 router.post("/users/balance/change", requireAuth, express.json(), changeBalanceHandler);
 
+// DEPOSIT - FIXED: Accept any amount
 router.post("/users/deposit", requireAuth, express.json(), wrapAsync(async (req, res) => {
   let amount = Number(req.body?.amount) || 0;
+  if (amount <= 0) return sendError(res, 400, "Amount must be greater than 0");
+  
   req.body = { delta: amount };
   return changeBalanceHandler(req, res);
 }));
 
+// WITHDRAW - FIXED: Accept any amount
 router.post("/users/withdraw", requireAuth, express.json(), wrapAsync(async (req, res) => {
   let amount = Number(req.body?.amount) || 0;
+  if (amount <= 0) return sendError(res, 400, "Amount must be greater than 0");
+  
   req.body = { delta: -Math.abs(amount) };
   return changeBalanceHandler(req, res);
 }));
