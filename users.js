@@ -13,12 +13,12 @@ const RateLimiter = require("./rateLimiter");
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 
 const registerLimiter = new RateLimiter({
-  maxRequests: 999,
+  maxRequests: 10,
   windowMs: 3600000
 });
 
 const loginLimiter = new RateLimiter({
-  maxRequests: 999,
+  maxRequests: 10,
   windowMs: 900000
 });
 
@@ -62,74 +62,117 @@ router.post("/game/payout", express.json(), (req, res) => {
   }
 });
 
-// REGISTER - FIXED: Use provided username
+// REGISTER - BALANCED: Not too strict, but checks for duplicates
 router.post("/auth/register", 
   registerLimiter.middleware({
     keyFn: (req) => req.ip,
-    onLimitExceeded: (req, res) => sendError(res, 429, "Too many attempts")
+    onLimitExceeded: (req, res) => sendError(res, 429, "Too many registration attempts. Please try again later.")
   }),
   express.json(), 
   wrapAsync(async (req, res) => {
     const db = req.app.locals.db;
     const { username, phone, password } = req.body || {};
 
-    const id = uuidv4();
-    const now = new Date().toISOString();
-    const password_hash = await bcrypt.hash(password || "", 10);
+    // Basic checks - not too strict
+    if (!phone || String(phone).trim().length === 0) {
+      return sendError(res, 400, "Phone number is required");
+    }
+
+    if (!password || String(password).trim().length === 0) {
+      return sendError(res, 400, "Password is required");
+    }
+
+    if (!username || String(username).trim().length === 0) {
+      return sendError(res, 400, "Username is required");
+    }
+
+    const trimmedPhone = String(phone).trim();
+    const trimmedUsername = String(username).trim();
+    const trimmedPassword = String(password).trim();
 
     try {
-      // Use provided username, not default "user"
-      const finalUsername = username && String(username).trim().length > 0 ? String(username).trim() : "user_" + Math.random().toString(36).substring(7);
+      // CHECK IF PHONE ALREADY EXISTS
+      const existing = await db.query("SELECT id FROM users WHERE phone = $1", [trimmedPhone]);
+      if (existing.rows.length > 0) {
+        return sendError(res, 409, "Phone number already registered");
+      }
+
+      const id = uuidv4();
+      const now = new Date().toISOString();
+      const password_hash = await bcrypt.hash(trimmedPassword, 10);
 
       await db.query(
         `INSERT INTO users (id, username, phone, password_hash, balance, freerounds, createdat, updatedat)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [id, finalUsername, phone || "", password_hash, 0, 0, now, now]
+        [id, trimmedUsername, trimmedPhone, password_hash, 0, 0, now, now]
       );
 
       const userRow = await db.query("SELECT * FROM users WHERE id = $1", [id]);
       const user = sanitizeUser(userRow.rows[0]);
       const token = jwt.sign({ uid: id }, JWT_SECRET, { expiresIn: "30d" });
 
-      logger.info('auth.register.success', { userId: id, username: finalUsername, phone });
+      logger.info('auth.register.success', { userId: id, username: trimmedUsername, phone: trimmedPhone });
 
       return res.status(201).json({ token, user });
     } catch (err) {
       logger.error('auth.register.error', { message: err && err.message ? err.message : String(err) });
+      
+      // Check if it's a unique constraint violation
+      if (err.code === '23505') {
+        return sendError(res, 409, "Phone number already registered");
+      }
+
       return sendError(res, 400, "Registration failed: " + (err && err.message ? err.message : "Unknown error"));
     }
   })
 );
 
-// LOGIN - NO VALIDATION
+// LOGIN - STANDARD: Check if user exists and password matches
 router.post("/auth/login",
   loginLimiter.middleware({
     keyFn: (req) => req.ip,
-    onLimitExceeded: (req, res) => sendError(res, 429, "Too many attempts")
+    onLimitExceeded: (req, res) => sendError(res, 429, "Too many login attempts. Please try again later.")
   }),
   express.json(),
   wrapAsync(async (req, res) => {
     const db = req.app.locals.db;
     const { phone, password } = req.body || {};
 
+    // Check required fields
+    if (!phone || String(phone).trim().length === 0) {
+      return sendError(res, 400, "Phone number is required");
+    }
+
+    if (!password || String(password).trim().length === 0) {
+      return sendError(res, 400, "Password is required");
+    }
+
+    const trimmedPhone = String(phone).trim();
+    const trimmedPassword = String(password).trim();
+
     try {
-      const rowRes = await db.query("SELECT * FROM users WHERE phone = $1", [phone || ""]);
+      // QUERY DATABASE FOR USER
+      const rowRes = await db.query("SELECT * FROM users WHERE phone = $1", [trimmedPhone]);
       const row = rowRes.rows[0];
       
+      // USER NOT FOUND
       if (!row) {
-        return sendError(res, 401, "Invalid credentials");
+        logger.warn('auth.login.user_not_found', { phone: trimmedPhone });
+        return sendError(res, 401, "Invalid phone or password");
       }
 
-      const ok = await bcrypt.compare(password || "", row.password_hash || "");
+      // VERIFY PASSWORD
+      const ok = await bcrypt.compare(trimmedPassword, row.password_hash || "");
       if (!ok) {
-        logger.warn('auth.login.invalid_password', { phone });
-        return sendError(res, 401, "Invalid credentials");
+        logger.warn('auth.login.invalid_password', { phone: trimmedPhone });
+        return sendError(res, 401, "Invalid phone or password");
       }
 
+      // PASSWORD CORRECT - GENERATE TOKEN
       const user = sanitizeUser(row);
       const token = jwt.sign({ uid: row.id }, JWT_SECRET, { expiresIn: "30d" });
 
-      logger.info('auth.login.success', { userId: row.id, phone });
+      logger.info('auth.login.success', { userId: row.id, phone: trimmedPhone });
 
       return res.json({ token, user });
     } catch (err) {
@@ -196,19 +239,25 @@ const changeBalanceHandler = wrapAsync(async (req, res) => {
 
 router.post("/users/balance/change", requireAuth, express.json(), changeBalanceHandler);
 
-// DEPOSIT - FIXED: Accept any amount
+// DEPOSIT - FLEXIBLE: Accept amounts > 0
 router.post("/users/deposit", requireAuth, express.json(), wrapAsync(async (req, res) => {
-  let amount = Number(req.body?.amount) || 0;
-  if (amount <= 0) return sendError(res, 400, "Amount must be greater than 0");
+  const amount = Number(req.body?.amount);
+  
+  if (!amount || isNaN(amount) || amount <= 0) {
+    return sendError(res, 400, "Deposit amount must be greater than 0");
+  }
   
   req.body = { delta: amount };
   return changeBalanceHandler(req, res);
 }));
 
-// WITHDRAW - FIXED: Accept any amount
+// WITHDRAW - FLEXIBLE: Accept amounts > 0
 router.post("/users/withdraw", requireAuth, express.json(), wrapAsync(async (req, res) => {
-  let amount = Number(req.body?.amount) || 0;
-  if (amount <= 0) return sendError(res, 400, "Amount must be greater than 0");
+  const amount = Number(req.body?.amount);
+  
+  if (!amount || isNaN(amount) || amount <= 0) {
+    return sendError(res, 400, "Withdraw amount must be greater than 0");
+  }
   
   req.body = { delta: -Math.abs(amount) };
   return changeBalanceHandler(req, res);
