@@ -115,6 +115,74 @@ async function ensureNextCommitExists(db) {
   return { idx: nextIdx, seed_hash: seedHash, created_at: new Date().toISOString() };
 }
 
+/* =================== AUTO-RUN BALANCE COLUMN MIGRATION =================== */
+async function fixBalanceColumnIfNeeded(db) {
+  try {
+    logger.info('migration.balance_column.checking');
+    
+    const checkType = await db.query(`
+      SELECT data_type FROM information_schema.columns 
+      WHERE table_name='users' AND column_name='balance'
+    `);
+
+    if (!checkType.rowCount) {
+      logger.warn('migration.balance_column.not_found', { message: 'Balance column does not exist' });
+      return;
+    }
+
+    const currentType = checkType.rows[0]?.data_type;
+    logger.info('migration.balance_column.current_type', { type: currentType });
+
+    if (currentType && currentType.toLowerCase() !== 'numeric') {
+      logger.info('migration.balance_column.converting_to_numeric');
+      
+      // Add temporary column
+      await db.query(`
+        ALTER TABLE users 
+        ADD COLUMN balance_temp NUMERIC(18,2) DEFAULT 0
+      `);
+      logger.info('migration.balance_column.temp_column_added');
+      
+      // Copy data over with proper conversion
+      await db.query(`
+        UPDATE users 
+        SET balance_temp = CAST(COALESCE(balance, '0') AS NUMERIC(18,2))
+      `);
+      logger.info('migration.balance_column.data_migrated');
+      
+      // Drop old column
+      await db.query(`
+        ALTER TABLE users 
+        DROP COLUMN balance
+      `);
+      logger.info('migration.balance_column.old_column_dropped');
+      
+      // Rename temp column
+      await db.query(`
+        ALTER TABLE users 
+        RENAME COLUMN balance_temp TO balance
+      `);
+      logger.info('migration.balance_column.column_renamed');
+      
+      logger.info('migration.balance_column.success', { message: '✅ Balance column fixed to NUMERIC!' });
+    } else {
+      logger.info('migration.balance_column.already_numeric', { message: '✅ Balance column is already NUMERIC' });
+    }
+
+    // Verify the fix
+    const verify = await db.query(`SELECT balance FROM users LIMIT 1`);
+    if (verify.rowCount > 0) {
+      const sampleBalance = verify.rows[0]?.balance;
+      logger.info('migration.balance_column.verified', { sampleBalance, type: typeof sampleBalance });
+    }
+  } catch (err) {
+    logger.warn('migration.balance_column.error', { 
+      message: err && err.message ? err.message : String(err),
+      note: 'Migration will retry on next restart'
+    });
+  }
+}
+
 /* =================== HTTP server and optional Socket.IO =================== */
 const httpServer = http.createServer(app);
 
@@ -248,6 +316,12 @@ async function start() {
 
     await initDb();
     app.locals.db = pool;
+
+    // ============ RUN MIGRATION ON STARTUP ============
+    logger.info('migration.balance_column.starting');
+    await fixBalanceColumnIfNeeded(pool);
+    logger.info('migration.balance_column.completed');
+    // ============ END MIGRATION ============
 
     // Phase 10: Initialize kill switch
     await killSwitch.initialize(pool);
