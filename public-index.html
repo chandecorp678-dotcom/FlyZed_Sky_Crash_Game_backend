@@ -362,7 +362,7 @@
     }
 
     async function login() {
-      const phone = document.getElementById('loginPhone').value;
+      const phone = document.getElementById('loginPhone').value.trim();
       const password = document.getElementById('loginPassword').value;
 
       console.log('Login values:', { phone, password: '***' });
