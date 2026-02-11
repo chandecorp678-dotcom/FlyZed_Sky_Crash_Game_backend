@@ -220,9 +220,19 @@ router.post("/users/deposit", requireAuth, express.json(), wrapAsync(async (req,
   // Make amount positive
   amount = Math.abs(amount);
   
-  logger.info('deposit.attempt', { userId, amount });
+  logger.info('deposit.attempt', { userId, amount, requestBody: req.body });
 
   try {
+    // Log BEFORE update
+    const beforeUpdate = await db.query(
+      `SELECT id, balance FROM users WHERE id = $1`,
+      [userId]
+    );
+    logger.info('deposit.before_update', { 
+      userId, 
+      balanceBefore: beforeUpdate.rows[0]?.balance 
+    });
+
     // Update balance - accept any amount including 0
     const rowRes = await db.query(
       `UPDATE users
@@ -231,6 +241,11 @@ router.post("/users/deposit", requireAuth, express.json(), wrapAsync(async (req,
        RETURNING *`,
       [amount, userId]
     );
+
+    logger.info('deposit.after_query', { 
+      rowCount: rowRes.rowCount,
+      balanceAfter: rowRes.rows[0]?.balance
+    });
 
     if (!rowRes.rowCount) {
       logger.warn('deposit.user_not_found', { userId });
@@ -242,7 +257,8 @@ router.post("/users/deposit", requireAuth, express.json(), wrapAsync(async (req,
     logger.info('deposit.success', { 
       userId, 
       depositAmount: amount, 
-      newBalance: updatedUser.balance 
+      newBalance: updatedUser.balance,
+      sanitizedUser: updatedUser
     });
 
     return res.json(updatedUser);
