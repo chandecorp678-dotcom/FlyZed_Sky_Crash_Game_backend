@@ -203,22 +203,27 @@ router.get("/users/me", requireAuth, (req, res) => {
   return res.json(req.user);
 });
 
-// ============ DEPOSIT ENDPOINT - FIXED ============
+// ============ DEPOSIT ENDPOINT - NO RESTRICTIONS ON AMOUNT ============
 router.post("/users/deposit", requireAuth, express.json(), wrapAsync(async (req, res) => {
   const db = req.app.locals.db;
   const userId = req.user.id;
-  const rawAmount = req.body?.amount;
-  const amount = Number(rawAmount) || 0;
   
-  logger.info('deposit.attempt', { userId, rawAmount, amount });
-
-  // Validate amount
-  if (isNaN(amount) || amount <= 0) {
-    return sendError(res, 400, "Invalid deposit amount");
+  // Get amount from body - accept anything, even 0, null, undefined
+  let amount = req.body?.amount;
+  
+  // Convert to number, default to 0 if invalid
+  amount = Number(amount);
+  if (isNaN(amount)) {
+    amount = 0;
   }
+  
+  // Make amount positive
+  amount = Math.abs(amount);
+  
+  logger.info('deposit.attempt', { userId, amount });
 
   try {
-    // Update balance and get fresh user data from database
+    // Update balance - accept any amount including 0
     const rowRes = await db.query(
       `UPDATE users
        SET balance = balance + $1, updatedat = NOW()
@@ -245,39 +250,68 @@ router.post("/users/deposit", requireAuth, express.json(), wrapAsync(async (req,
     logger.error("deposit.error", { 
       userId, 
       amount, 
-      message: err && err.message ? err.message : String(err) 
+      message: err && err.message ? err.message : String(err),
+      stack: err && err.stack ? err.stack : undefined
     });
     return sendError(res, 500, "Deposit failed: " + (err && err.message ? err.message : "Unknown error"));
   }
 }));
 
-// ============ WITHDRAW ENDPOINT - FIXED ============
+// ============ WITHDRAW ENDPOINT - WITH BALANCE CHECK ============
 router.post("/users/withdraw", requireAuth, express.json(), wrapAsync(async (req, res) => {
   const db = req.app.locals.db;
   const userId = req.user.id;
-  const rawAmount = req.body?.amount;
-  const amount = Number(rawAmount) || 0;
   
-  logger.info('withdraw.attempt', { userId, rawAmount, amount });
-
-  // Validate amount
-  if (isNaN(amount) || amount <= 0) {
-    return sendError(res, 400, "Invalid withdrawal amount");
+  // Get amount from body
+  let amount = req.body?.amount;
+  
+  // Convert to number, default to 0 if invalid
+  amount = Number(amount);
+  if (isNaN(amount)) {
+    amount = 0;
   }
+  
+  // Make amount positive
+  amount = Math.abs(amount);
+  
+  logger.info('withdraw.attempt', { userId, amount });
 
   try {
-    // Update balance and get fresh user data from database
+    // First, check current balance
+    const userCheck = await db.query(
+      `SELECT balance FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    if (!userCheck.rowCount) {
+      logger.warn('withdraw.user_not_found', { userId });
+      return sendError(res, 404, "User not found");
+    }
+
+    const currentBalance = Number(userCheck.rows[0].balance || 0);
+
+    // Check if user has enough balance
+    if (currentBalance < amount) {
+      logger.warn('withdraw.insufficient_balance', { 
+        userId, 
+        requestedAmount: amount, 
+        currentBalance 
+      });
+      return sendError(res, 402, `Insufficient balance. You have K ${currentBalance.toFixed(2)}, but requested K ${amount.toFixed(2)}`);
+    }
+
+    // Update balance - deduct only if sufficient funds
     const rowRes = await db.query(
       `UPDATE users
        SET balance = balance - $1, updatedat = NOW()
-       WHERE id = $2 AND (balance - $1) >= 0
+       WHERE id = $2
        RETURNING *`,
       [amount, userId]
     );
 
     if (!rowRes.rowCount) {
-      logger.warn('withdraw.insufficient_balance', { userId, requestedAmount: amount });
-      return sendError(res, 402, "Insufficient balance");
+      logger.warn('withdraw.update_failed', { userId });
+      return sendError(res, 500, "Failed to process withdrawal");
     }
 
     const updatedUser = sanitizeUser(rowRes.rows[0]);
@@ -285,6 +319,7 @@ router.post("/users/withdraw", requireAuth, express.json(), wrapAsync(async (req
     logger.info('withdraw.success', { 
       userId, 
       withdrawAmount: amount, 
+      previousBalance: currentBalance,
       newBalance: updatedUser.balance 
     });
 
@@ -293,7 +328,8 @@ router.post("/users/withdraw", requireAuth, express.json(), wrapAsync(async (req
     logger.error("withdraw.error", { 
       userId, 
       amount, 
-      message: err && err.message ? err.message : String(err) 
+      message: err && err.message ? err.message : String(err),
+      stack: err && err.stack ? err.stack : undefined
     });
     return sendError(res, 500, "Withdrawal failed: " + (err && err.message ? err.message : "Unknown error"));
   }
