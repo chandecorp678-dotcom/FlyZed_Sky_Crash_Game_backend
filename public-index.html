@@ -185,6 +185,93 @@
     </div>
   </div>
   
+    <!-- Terms & Conditions Modal -->
+  <div class="modal" id="tcModal">
+    <div class="modal-content">
+      <h3>📋 Terms & Conditions</h3>
+      
+      <div style="max-height:300px;overflow-y:auto;background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;font-size:12px;line-height:1.6;">
+        <h4 style="color:var(--accent);margin-top:0;">Ka Ndeke – Terms & Conditions</h4>
+        
+        <p><strong>1. ACCEPTANCE OF TERMS</strong></p>
+        <p>By using Ka Ndeke, you agree to these Terms & Conditions. If you do not agree, please do not use our service.</p>
+        
+        <p><strong>2. AGE REQUIREMENT</strong></p>
+        <p>You must be at least 18 years old to use this service. By accepting these terms, you confirm you are 18 or older.</p>
+        
+        <p><strong>3. NO REAL MONEY (DEMO MODE)</strong></p>
+        <p>This is currently a DEMO version. No real money is involved. All balances are virtual and for testing purposes only.</p>
+        
+        <p><strong>4. RESPONSIBLE GAMBLING</strong></p>
+        <p>Ka Ndeke promotes responsible gambling. Please gamble responsibly and within your means:</p>
+        <ul style="margin:10px 0;padding-left:20px;">
+          <li>Set limits on how much you spend</li>
+          <li>Never gamble money you cannot afford to lose</li>
+          <li>Take regular breaks</li>
+          <li>Seek help if you have gambling problems</li>
+        </ul>
+        
+        <p><strong>5. FAIR PLAY</strong></p>
+        <p>All crash points are generated fairly using cryptographic seeds. You can verify fairness by viewing the proof after each round.</p>
+        
+        <p><strong>6. ACCOUNT RESPONSIBILITY</strong></p>
+        <p>You are responsible for keeping your account credentials secret. Ka Ndeke is not liable for unauthorized access.</p>
+        
+        <p><strong>7. LIMITATION OF LIABILITY</strong></p>
+        <p>Ka Ndeke is provided "as is" without warranties. We are not liable for losses incurred through gameplay.</p>
+        
+        <p><strong>8. CHANGES TO TERMS</strong></p>
+        <p>Ka Ndeke may update these terms at any time. Continued use constitutes acceptance.</p>
+        
+        <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:20px;">
+          Last Updated: 2026-02-12<br>
+          © 2026 Ka Ndeke. All rights reserved.
+        </p>
+      </div>
+
+      <label style="display:flex;gap:8px;align-items:flex-start;margin:15px 0;color:var(--muted);font-size:13px;">
+        <input type="checkbox" id="tcAgree" style="margin-top:3px;cursor:pointer;flex-shrink:0;">
+        <span>I have read and accept the Terms & Conditions</span>
+      </label>
+
+      <label style="display:flex;gap:8px;align-items:flex-start;margin:15px 0;color:var(--muted);font-size:13px;">
+        <input type="checkbox" id="ageConfirm" style="margin-top:3px;cursor:pointer;flex-shrink:0;">
+        <span>I confirm I am 18 years old or older</span>
+      </label>
+
+      <div id="tcMessage" class="modal-message"></div>
+
+      <div class="modal-actions">
+        <button class="primary" onclick="acceptTC()">Accept & Continue</button>
+        <button class="btn-secondary" onclick="rejectTC()">Decline</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Responsible Gaming Warning Modal -->
+  <div class="modal" id="gamingWarningModal">
+    <div class="modal-content">
+      <h3>⚠️ Responsible Gaming</h3>
+      
+      <div style="background:#d7263d;padding:15px;border-radius:8px;margin:15px 0;color:white;font-size:14px;line-height:1.6;">
+        <p style="margin-top:0;"><strong>🎮 Gaming Reminder</strong></p>
+        <p>You've been playing for a while. Remember to:</p>
+        <ul style="margin:10px 0;padding-left:20px;">
+          <li>Take a break</li>
+          <li>Only gamble what you can afford to lose</li>
+          <li>Never chase losses</li>
+          <li>Set time and money limits</li>
+        </ul>
+        <p style="margin-bottom:0;font-size:12px;opacity:0.9;">If you have gambling concerns, please seek help.</p>
+      </div>
+
+      <div class="modal-actions">
+        <button class="primary" onclick="hideModals()">I Understand</button>
+        <button class="btn-secondary" onclick="selfExclude()">Self-Exclude</button>
+      </div>
+    </div>
+  </div>
+  
   <script>
     const API_BASE = 'https://ka-ndeke-backend-5dgy.onrender.com/api';
     const TOKEN_KEY = 'flyzed_token';
@@ -199,6 +286,9 @@
     let roundActive = false;
     let statusPoller = null;
 	let currentRoundId = null;  // Track current round ID for proof viewing
+	let tcAccepted = false;  // Track if user accepted T&C
+	let gamingWarningShown = false;  // Track if warning shown this session
+	let warningTimer = null;  // Timer for 30-min warning
 
     const loginModal = document.getElementById('loginModal');
     const registerModal = document.getElementById('registerModal');
@@ -288,6 +378,8 @@
       loginModal.classList.remove('show');
       registerModal.classList.remove('show');
 	  document.getElementById('proofModal').classList.remove('show');
+	  document.getElementById('tcModal').classList.remove('show');
+	  document.getElementById('gamingWarningModal').classList.remove('show');
     }
 
     function showMessage(modalId, message, isError) {
@@ -341,56 +433,74 @@
     statusPoller = setInterval(pollRoundStatus, 250);
 
     async function register() {
-      const username = document.getElementById('regName').value;
-      const phone = document.getElementById('regPhone').value;
-      const password = document.getElementById('regPassword').value;
-      const agreed = document.getElementById('agreeTerms').checked;
+  const username = document.getElementById('regName').value;
+  const phone = document.getElementById('regPhone').value;
+  const password = document.getElementById('regPassword').value;
+  const agreed = document.getElementById('agreeTerms').checked;
 
-      console.log('Sending register:', { username, phone, password, agreed });
+  console.log('Sending register:', { username, phone, password, agreed });
 
-      try {
-        const data = await apiFetch('/auth/register', {
-          method: 'POST',
-          body: { username, phone, password }
-        }, false);
+  try {
+    const data = await apiFetch('/auth/register', {
+      method: 'POST',
+      body: { username, phone, password }
+    }, false);
 
-        localStorage.setItem(TOKEN_KEY, data.token);
-        currentUser = data.user;
-        authMode = 'server';
-        updateUI();
-
-        showMessage('registerMessage', 'Registration successful!', false);
-        setTimeout(hideModals, 1000);
-      } catch (err) {
-        console.error('Register error:', err);
-        showMessage('registerMessage', err.message || 'Registration failed', true);
-      }
-    }
+    localStorage.setItem(TOKEN_KEY, data.token);
+    currentUser = data.user;
+    authMode = 'server';
+    updateUI();
+    
+    // Close register modal and show T&C modal
+    document.getElementById('registerModal').classList.remove('show');
+    showTC();
+    
+  } catch (err) {
+    console.error('Register error:', err);
+    showMessage('registerMessage', err.message || 'Registration failed', true);
+  }
+}
 
     async function login() {
-      const phone = document.getElementById('loginPhone').value;
-      const password = document.getElementById('loginPassword').value;
+  const phone = document.getElementById('loginPhone').value;
+  const password = document.getElementById('loginPassword').value;
 
-      console.log('Sending login:', { phone, password });
+  console.log('Sending login:', { phone, password });
 
-      try {
-        const data = await apiFetch('/auth/login', {
-          method: 'POST',
-          body: { phone, password }
-        }, false);
+  try {
+    const data = await apiFetch('/auth/login', {
+      method: 'POST',
+      body: { phone, password }
+    }, false);
 
-        localStorage.setItem(TOKEN_KEY, data.token);
-        currentUser = data.user;
-        authMode = 'server';
-        updateUI();
+    localStorage.setItem(TOKEN_KEY, data.token);
+    currentUser = data.user;
+    authMode = 'server';
+    updateUI();
 
-        showMessage('loginMessage', 'Login successful!', false);
-        setTimeout(hideModals, 1000);
-      } catch (err) {
-        console.error('Login error:', err);
-        showMessage('loginMessage', err.message || 'Login failed', true);
-      }
-    }
+    showMessage('loginMessage', 'Login successful!', false);
+    
+    setTimeout(() => {
+      hideModals();
+      // Check if need to accept T&C
+      apiFetch('/legal/compliance-status', {}, true)
+        .then(res => {
+          if (!res.status.compliant) {
+            showTC();
+          } else {
+            tcAccepted = true;
+          }
+        })
+        .catch(() => {
+          tcAccepted = true;
+        });
+    }, 1000);
+    
+  } catch (err) {
+    console.error('Login error:', err);
+    showMessage('loginMessage', err.message || 'Login failed', true);
+  }
+}
 
     function logout() {
       localStorage.removeItem(TOKEN_KEY);
@@ -401,6 +511,27 @@
     }
 
     async function startGame() {
+	// CHECK: Has user accepted T&C?
+	  if (authMode === 'server' && !tcAccepted) {
+		try {
+		const compliance = await apiFetch('/legal/compliance-status', {}, true);
+      if (!compliance.status.compliant) {
+        alert('⚠️ You must accept Terms & Conditions before playing');
+        showTC();
+        return;
+      }
+      tcAccepted = true;
+    } catch (err) {
+      console.warn('Could not check compliance:', err);
+    }
+  }
+
+  // Show gaming warning after 30 minutes
+  if (warningTimer) clearTimeout(warningTimer);
+  warningTimer = setTimeout(() => {
+    showGamingWarning();
+  }, 30 * 60 * 1000); // 30 minutes
+  
       if (running) return alert('Round already in progress');
 
       const bet = Number(document.getElementById('betAmount').value);
@@ -656,6 +787,102 @@ function copyProof() {
 }
 
 // ============ END STAGE 7 ============
+// ============ STAGE 11: LEGAL COMPLIANCE ============
+
+async function showTC() {
+  document.getElementById('tcAgree').checked = false;
+  document.getElementById('ageConfirm').checked = false;
+  document.getElementById('tcMessage').className = 'modal-message';
+  document.getElementById('tcMessage').textContent = '';
+  document.getElementById('tcModal').classList.add('show');
+}
+
+async function acceptTC() {
+  const tcChecked = document.getElementById('tcAgree').checked;
+  const ageChecked = document.getElementById('ageConfirm').checked;
+
+  if (!tcChecked || !ageChecked) {
+    const msg = document.getElementById('tcMessage');
+    msg.className = 'modal-message error';
+    msg.textContent = '❌ You must accept both terms and confirm your age';
+    return;
+  }
+
+  try {
+    // Accept T&C on backend
+    await apiFetch('/legal/accept-terms', {
+      method: 'POST',
+      body: {}
+    }, true);
+
+    // Verify age on backend
+    await apiFetch('/legal/verify-age', {
+      method: 'POST',
+      body: { confirmed: true }
+    }, true);
+
+    tcAccepted = true;
+    document.getElementById('tcModal').classList.remove('show');
+    
+    const msg = document.getElementById('tcMessage');
+    msg.className = 'modal-message success';
+    msg.textContent = '✅ You can now play!';
+    
+    console.log('✅ User accepted T&C and verified age');
+    
+  } catch (err) {
+    console.error('Error accepting T&C:', err);
+    const msg = document.getElementById('tcMessage');
+    msg.className = 'modal-message error';
+    msg.textContent = '❌ Error: ' + err.message;
+  }
+}
+
+function rejectTC() {
+  const msg = document.getElementById('tcMessage');
+  msg.className = 'modal-message error';
+  msg.textContent = '❌ You cannot play without accepting the terms';
+  
+  // Hide modal after 2 seconds
+  setTimeout(() => {
+    document.getElementById('tcModal').classList.remove('show');
+    document.getElementById('registerModal').classList.remove('show');
+    loginModal.classList.remove('show');
+  }, 2000);
+}
+
+function showGamingWarning() {
+  if (!gamingWarningShown && running) {
+    document.getElementById('gamingWarningModal').classList.add('show');
+    gamingWarningShown = true;
+  }
+}
+
+function selfExclude() {
+  const days = prompt('Self-exclude for how many days?\n7 = 1 week\n30 = 1 month\n90 = 3 months\n\nEnter: 7, 30, or 90');
+  
+  if (!days) return;
+  
+  const daysNum = Number(days);
+  if (![7, 30, 90].includes(daysNum)) {
+    alert('Invalid. Please enter 7, 30, or 90');
+    return;
+  }
+  
+  if (confirm(`Are you sure? You will be unable to play for ${daysNum} days.`)) {
+    apiFetch('/legal/self-exclude', {
+      method: 'POST',
+      body: { days: daysNum }
+    }, true).then(() => {
+      alert(`✅ You are self-excluded for ${daysNum} days. Contact support to appeal.`);
+      logout();
+    }).catch(err => {
+      alert('Error: ' + err.message);
+    });
+  }
+}
+
+// ============ END STAGE 11 ============
   </script>
 </body>
 </html>
