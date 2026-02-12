@@ -128,8 +128,9 @@ async function requestMoney(phone, amount, externalId, description = 'Ka Ndeke D
     };
 
     const headers = {
+    const token = await getAccessToken('collections');  // ✅ Await it!  
       'X-Reference-Id': transactionId,
-      'X-Callback-Url': process.env.MTN_CALLBACK_URL || 'https://your-domain.com/api/payments/callback',
+      'X-Callback-Url': process.env.MTN_CALLBACK_URL || 'https://ka-ndeke-backend-5dgy.onrender.com/api/payments/callback',
       'Authorization': `Bearer ${getAccessToken('collections')}`,
       'Ocp-Apim-Subscription-Key': config.collectionsSubKey
     };
@@ -194,12 +195,14 @@ async function sendMoney(phone, amount, externalId, description = 'Ka Ndeke With
       payeeNote: description
     };
 
-    const headers = {
-      'X-Reference-Id': transactionId,
-      'X-Callback-Url': process.env.MTN_CALLBACK_URL || 'https://your-domain.com/api/payments/callback',
-      'Authorization': `Bearer ${getAccessToken('disbursements')}`,
-      'Ocp-Apim-Subscription-Key': config.disbursementsSubKey
-    };
+    const token = await getAccessToken('disbursements');
+
+const headers = {
+  'X-Reference-Id': transactionId,
+  'X-Callback-Url': process.env.MTN_CALLBACK_URL || 'https://ka-ndeke-backend-5dgy.onrender.com/api/payments/callback',
+  'Authorization': `Bearer ${token}`,
+  'Ocp-Apim-Subscription-Key': config.disbursementsSubKey
+};
 
     logger.info('mtnPayments.sendMoney.start', { phone: normalizedPhone, amount: numAmount, externalId });
 
@@ -283,70 +286,40 @@ async function getTransactionStatus(transactionId, type = 'collections') {
  */
 const tokenCache = {}; // { type: { token, expiresAt } }
 
-function getAccessToken(type = 'collections') {
-  // For demo: return a placeholder. In production, call MTN OAuth endpoint
-  // This is simplified; you'd normally call /token endpoint with credentials
-  const cacheKey = `${type}_token`;
+async function getAccessToken(type = 'collections') {
+  const apiUser = type === 'collections' 
+    ? config.collectionsApiUser 
+    : config.disbursementsApiUser;
   
-  if (tokenCache[cacheKey] && tokenCache[cacheKey].expiresAt > Date.now()) {
-    return tokenCache[cacheKey].token;
-  }
-
-  // In production, you'd call:
-  // POST /token
-  // with Basic auth header: base64(apiUser:apiKey)
-  // For now, return a mock token (replace with real implementation)
-  const mockToken = `mock_token_${type}_${Date.now()}`;
+  const apiKey = process.env.MTN_API_KEY;
   
-  tokenCache[cacheKey] = {
-    token: mockToken,
-    expiresAt: Date.now() + 3600000 // 1 hour
-  };
-
-  return mockToken;
-}
-
-/**
- * Normalize phone number to international format
- * Handles: 0777123456, 777123456, +260777123456, 260777123456
- * Returns: 260777123456 (without +)
- */
-function normalizePhoneNumber(phone) {
-  if (!phone || typeof phone !== 'string') return null;
-
-  let cleaned = phone.trim().replace(/[\s\-()]/g, '');
-
-  // Remove leading +
-  if (cleaned.startsWith('+')) {
-    cleaned = cleaned.slice(1);
+  if (!apiUser || !apiKey) {
+    throw new Error(`Missing MTN credentials for ${type}`);
   }
 
-  // If starts with 0 (local format), replace with country code
-  if (cleaned.startsWith('0')) {
-    cleaned = '260' + cleaned.slice(1);
-  }
-
-  // Ensure it's 12 digits (260 + 9 digit Zambia number)
-  if (!/^\d{12}$/.test(cleaned)) {
-    return null;
-  }
-
-  return cleaned;
-}
-
-/**
- * Verify webhook signature (if MTN sends signed callbacks)
- */
-function verifyWebhookSignature(payload, signature, secret) {
   try {
-    const hash = crypto
-      .createHmac('sha256', secret)
-      .update(JSON.stringify(payload))
-      .digest('hex');
-    return hash === signature;
+    // Create Basic Auth header: base64(apiUser:apiKey)
+    const auth = Buffer.from(`${apiUser}:${apiKey}`).toString('base64');
+    
+    const response = await httpsRequest('POST', '/token', {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type': 'application/json'
+    });
+
+    if (response.status >= 200 && response.status < 300) {
+      const token = response.body?.access_token;
+      if (!token) {
+        throw new Error('No access token in response');
+      }
+      
+      logger.info('mtnPayments.getAccessToken.success', { type, expiresIn: response.body.expires_in });
+      return token;
+    } else {
+      throw new Error(`MTN token request failed: ${response.status}`);
+    }
   } catch (err) {
-    logger.warn('mtnPayments.verifyWebhookSignature.error', { message: err.message });
-    return false;
+    logger.error('mtnPayments.getAccessToken.error', { type, message: err.message });
+    throw err;
   }
 }
 
