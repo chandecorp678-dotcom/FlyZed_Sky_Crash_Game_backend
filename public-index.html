@@ -5,70 +5,499 @@
   <title>FlyZed – Sky Crash Game</title>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#03101f" />
-  <style>
+    <style>
     :root{
-      --bg:#081a2b; --panel:#0c223a; --accent:#FFD700; --muted:rgba(255,255,255,0.72);
-      --white:#ffffff; --danger:#d7263d; --control-height:48px; --gap:10px;
+      --bg:#0a0e27;
+      --bg-secondary:#111829;
+      --panel:#1a1f3a;
+      --accent:#00d4ff;
+      --accent-dark:#0099cc;
+      --muted:rgba(255,255,255,0.65);
+      --white:#ffffff;
+      --danger:#ff3366;
+      --success:#00d981;
+      --warning:#ffa500;
+      --control-height:48px;
+      --gap:12px;
+      --shadow: 0 8px 32px rgba(0, 212, 255, 0.1);
+      --shadow-hover: 0 12px 48px rgba(0, 212, 255, 0.2);
     }
-    * { box-sizing: border-box; }
-    html,body{height:100%;margin:0;padding:0;background:var(--bg);color:var(--white);-webkit-font-smoothing:antialiased;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;}
-
-    header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:#03101f;position:sticky;top:0;z-index:30;border-bottom:1px solid rgba(255,255,255,0.03)}
-    header h1{margin:0;font-size:18px;color:var(--accent);font-weight:700;display:flex;align-items:center;gap:8px}
-    .header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-
-    .panel{padding:10px 12px;text-align:left}
-    #userInfo{font-size:14px;color:var(--muted)}
-    #username{font-weight:700;color:var(--white)}
-    #balance{color:var(--white);font-weight:600}
-
-    .game-box{margin:12px;border-radius:12px;background:linear-gradient(180deg,#12345a,#0a2b46);padding:20px;min-height:300px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-direction:column}
-    .game-content{display:flex;align-items:center;gap:30px;width:100%;justify-content:center}
-    #multiplier{font-size:48px;font-weight:800;color:var(--accent);margin:0;min-width:150px;text-align:center;font-family:monospace}
-    #plane{width:120px;height:60px;transition:all 0.1s linear;will-change:transform}
-    #status{font-size:16px;color:var(--muted);margin-top:20px;text-align:center;width:100%;min-height:30px}
-
-    .controls{padding:12px;display:flex;flex-direction:column;gap:10px;align-items:stretch}
-    .row{display:flex;gap:8px;width:100%;align-items:center}
-    input[type=number],input[type=text],input[type=password]{padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#071a2b;color:var(--white);flex:1;font-size:16px}
-    button{cursor:pointer;border:none;border-radius:10px;padding:10px 14px;font-weight:700;transition:all 0.2s;font-size:14px}
-    .primary{background:var(--accent);color:#000;padding:12px 18px;flex:1}
-    .primary:hover:not(:disabled){opacity:0.9}
-    .primary:disabled{opacity:0.5;cursor:not-allowed}
-    .danger{background:var(--danger);color:#fff;padding:12px 18px;flex:1}
-    .danger:hover:not(:disabled){opacity:0.9}
-    .danger:disabled{opacity:0.5;cursor:not-allowed}
-    .btn-secondary{background:rgba(255,255,255,0.1);color:var(--white)}
-    .btn-secondary:hover{background:rgba(255,255,255,0.15)}
-
-    .wallet-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
-    .wallet-row button{background:#f0f0f0;color:#111;border-radius:8px;padding:10px 12px;font-weight:600;flex:0}
-
-    .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:none;align-items:center;justify-content:center;z-index:1000;padding:12px}
-    .modal.show{display:flex}
-    .modal-content{background:var(--panel);padding:20px;border-radius:10px;color:var(--white);width:100%;max-width:450px;max-height:90vh;overflow:auto}
-    .modal h3{margin-top:0;color:var(--accent)}
-    .modal input{width:100%;margin-bottom:10px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#071a2b;color:var(--white)}
-    .modal-actions{display:flex;gap:8px;margin-top:15px}
-    .modal-actions button{flex:1}
-    .modal-message{margin:10px 0;padding:10px;border-radius:6px;font-size:14px;display:none}
-    .modal-message.error{background:#d7263d;color:#fff;display:block}
-    .modal-message.success{background:#083a1f;color:#fff;display:block}
-
-    .hidden{display:none !important}
-    main{padding-bottom:120px}
-
-    @media (max-width:600px){
-      .game-content{flex-direction:column;gap:15px}
-      #multiplier{font-size:36px}
-      #plane{width:80px;height:40px}
-      .controls{padding:10px;gap:8px}
-      input[type=number]{width:100%}
-      .row{flex-direction:column}
-      .row input,.row button{width:100%}
+    
+    * { 
+      box-sizing: border-box; 
+    }
+    
+    html,body{
+      height:100%;
+      margin:0;
+      padding:0;
+      background:var(--bg);
+      color:var(--white);
+      -webkit-font-smoothing:antialiased;
+      font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-size: 16px;
     }
 
-    button:focus,input:focus{outline:3px solid rgba(255,215,0,0.15);outline-offset:2px}
+    header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:16px 20px;
+      background:var(--panel);
+      position:sticky;
+      top:0;
+      z-index:30;
+      border-bottom:2px solid rgba(0, 212, 255, 0.1);
+      box-shadow: var(--shadow);
+    }
+    
+    header h1{
+      margin:0;
+      font-size:24px;
+      color:var(--accent);
+      font-weight:700;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      letter-spacing: 1px;
+    }
+    
+    .header-right{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    .panel{
+      padding:16px;
+      text-align:left;
+      background:var(--panel);
+      border-radius:12px;
+      margin:12px;
+      box-shadow: var(--shadow);
+    }
+    
+    #userInfo{
+      font-size:14px;
+      color:var(--muted);
+      line-height: 1.6;
+    }
+    
+    #username{
+      font-weight:700;
+      color:var(--accent);
+    }
+    
+    #balance{
+      color:var(--success);
+      font-weight:700;
+      font-size: 16px;
+    }
+
+    .game-box{
+      margin:12px;
+      border-radius:16px;
+      background:linear-gradient(135deg, #1a2f4a 0%, #0a1f35 100%);
+      padding:24px;
+      min-height:350px;
+      position:relative;
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-direction:column;
+      border:2px solid rgba(0, 212, 255, 0.2);
+      box-shadow: var(--shadow);
+    }
+    
+    .game-content{
+      display:flex;
+      align-items:center;
+      gap:40px;
+      width:100%;
+      justify-content:center;
+    }
+    
+    #multiplier{
+      font-size:56px;
+      font-weight:900;
+      color:var(--accent);
+      margin:0;
+      min-width:180px;
+      text-align:center;
+      font-family:'Courier New', monospace;
+      letter-spacing: 2px;
+      text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+      animation: pulse 0.5s ease-in-out infinite alternate;
+    }
+    
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.05); }
+    }
+    
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    #plane{
+      width:140px;
+      height:70px;
+      transition:all 0.1s linear;
+      will-change:transform;
+      filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.4));
+    }
+    
+    #status{
+      font-size:16px;
+      color:var(--muted);
+      margin-top:24px;
+      text-align:center;
+      width:100%;
+      min-height:40px;
+      animation: fadeIn 0.5s ease-in;
+      font-weight: 500;
+    }
+
+    .controls{
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      align-items:stretch;
+      background:var(--panel);
+      margin:12px;
+      border-radius:12px;
+      box-shadow: var(--shadow);
+    }
+    
+    .row{
+      display:flex;
+      gap:12px;
+      width:100%;
+      align-items:center;
+    }
+    
+    input[type=number],input[type=text],input[type=password]{
+      padding:12px 16px;
+      border-radius:10px;
+      border:2px solid rgba(0, 212, 255, 0.2);
+      background:var(--bg-secondary);
+      color:var(--white);
+      flex:1;
+      font-size:15px;
+      transition: all 0.3s ease;
+    }
+    
+    input[type=number]:focus,input[type=text]:focus,input[type=password]:focus{
+      border-color:var(--accent);
+      outline: none;
+      box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+      background: rgba(0, 212, 255, 0.05);
+    }
+    
+    button{
+      cursor:pointer;
+      border:none;
+      border-radius:10px;
+      padding:12px 18px;
+      font-weight:700;
+      transition: all 0.3s ease;
+      font-size:14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    button:active {
+      transform: scale(0.98);
+    }
+    
+    .primary{
+      background:linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+      color:#000;
+      padding:14px 20px;
+      flex:1;
+      font-weight:800;
+      box-shadow: var(--shadow);
+    }
+    
+    .primary:hover:not(:disabled){
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-hover);
+    }
+    
+    .primary:disabled{
+      opacity:0.4;
+      cursor:not-allowed;
+    }
+    
+    .danger{
+      background:linear-gradient(135deg, var(--danger) 0%, #cc1a4a 100%);
+      color:#fff;
+      padding:14px 20px;
+      flex:1;
+      font-weight:800;
+      box-shadow: var(--shadow);
+    }
+    
+    .danger:hover:not(:disabled){
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-hover);
+    }
+    
+    .danger:disabled{
+      opacity:0.4;
+      cursor:not-allowed;
+    }
+    
+    .btn-secondary{
+      background:rgba(0, 212, 255, 0.1);
+      color:var(--accent);
+      border:2px solid rgba(0, 212, 255, 0.2);
+      transition: all 0.3s ease;
+    }
+    
+    .btn-secondary:hover{
+      background:rgba(0, 212, 255, 0.2);
+      border-color:var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .wallet-row{
+      display:flex;
+      gap:10px;
+      justify-content:center;
+      flex-wrap:wrap;
+      margin-top: 8px;
+    }
+    
+    .wallet-row button{
+      background:linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 212, 255, 0.05) 100%);
+      color:var(--accent);
+      border-radius:10px;
+      padding:12px 16px;
+      font-weight:600;
+      flex:0;
+      border:2px solid rgba(0, 212, 255, 0.2);
+    }
+    
+    .wallet-row button:hover {
+      background:linear-gradient(135deg, rgba(0, 212, 255, 0.25) 0%, rgba(0, 212, 255, 0.1) 100%);
+      border-color:var(--accent);
+    }
+
+    .modal{
+      position:fixed;
+      top:0;
+      left:0;
+      width:100%;
+      height:100%;
+      background:rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(5px);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:1000;
+      padding:12px;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    .modal.show{
+      display:flex;
+    }
+    
+    .modal-content{
+      background:var(--panel);
+      padding:28px;
+      border-radius:16px;
+      color:var(--white);
+      width:100%;
+      max-width:480px;
+      max-height:90vh;
+      overflow:auto;
+      border:2px solid rgba(0, 212, 255, 0.2);
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+      animation: slideIn 0.3s ease;
+    }
+    
+    .modal h3{
+      margin-top:0;
+      margin-bottom:20px;
+      color:var(--accent);
+      font-size: 20px;
+      letter-spacing: 0.5px;
+    }
+    
+    .modal input{
+      width:100%;
+      margin-bottom:12px;
+      padding:12px 16px;
+      border-radius:10px;
+      border:2px solid rgba(0, 212, 255, 0.2);
+      background:var(--bg-secondary);
+      color:var(--white);
+      transition: all 0.3s ease;
+    }
+    
+    .modal input:focus {
+      border-color:var(--accent);
+      outline: none;
+      box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+    }
+    
+    .modal-actions{
+      display:flex;
+      gap:10px;
+      margin-top:20px;
+    }
+    
+    .modal-actions button{
+      flex:1;
+    }
+    
+    .modal-message{
+      margin:12px 0;
+      padding:14px;
+      border-radius:8px;
+      font-size:13px;
+      display:none;
+      font-weight: 600;
+      border-left: 4px solid transparent;
+    }
+    
+    .modal-message.error{
+      background:rgba(255, 51, 102, 0.15);
+      color:var(--danger);
+      display:block;
+      border-left-color:var(--danger);
+    }
+    
+    .modal-message.success{
+      background:rgba(0, 217, 129, 0.15);
+      color:var(--success);
+      display:block;
+      border-left-color:var(--success);
+    }
+
+    .hidden{
+      display:none !important;
+    }
+    
+    main{
+      padding-bottom:120px;
+      background:var(--bg);
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-secondary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 212, 255, 0.3);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 212, 255, 0.5);
+    }
+
+    /* Mobile optimization */
+    @media (max-width:768px){
+      header h1{
+        font-size:20px;
+      }
+      
+      .game-box{
+        min-height:300px;
+        padding:16px;
+      }
+      
+      .game-content{
+        flex-direction:column;
+        gap:20px;
+      }
+      
+      #multiplier{
+        font-size:48px;
+      }
+      
+      #plane{
+        width:100px;
+        height:50px;
+      }
+      
+      .controls{
+        padding:12px;
+        gap:10px;
+      }
+      
+      input[type=number]{
+        font-size:16px;
+      }
+      
+      button {
+        padding: 14px 16px;
+        font-size: 13px;
+      }
+      
+      .row{
+        flex-direction:column;
+      }
+      
+      .row input,
+      .row button{
+        width:100%;
+      }
+      
+      .modal-content{
+        max-width:90%;
+        padding:20px;
+      }
+    }
+
+    @media (max-width:480px){
+      header{
+        padding:12px 16px;
+      }
+      
+      header h1{
+        font-size:18px;
+      }
+      
+      #multiplier{
+        font-size:40px;
+      }
+      
+      .game-box{
+        margin:8px;
+      }
+      
+      .controls{
+        margin:8px;
+      }
+      
+      button {
+        padding: 12px 14px;
+        font-size: 12px;
+      }
+    }
+
+    button:focus,input:focus{
+      outline:none;
+    }
   </style>
 </head>
 <body>
@@ -77,6 +506,7 @@
     <div class="header-right">
       <button id="loginBtn" onclick="showLogin()" class="btn-secondary">Login</button>
       <button id="registerBtn" onclick="showRegister()" class="btn-secondary">Register</button>
+	  <button id="adminBtn" onclick="openAdminDashboard()" class="btn-secondary hidden" title="Admin Dashboard">⚙️</button>
       <button id="logoutBtn" onclick="logout()" class="btn-secondary hidden">Logout</button>
     </div>
   </header>
@@ -191,10 +621,10 @@
       <h3>📋 Terms & Conditions</h3>
       
       <div style="max-height:300px;overflow-y:auto;background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;font-size:12px;line-height:1.6;">
-        <h4 style="color:var(--accent);margin-top:0;">Ka Ndeke – Terms & Conditions</h4>
+        <h4 style="color:var(--accent);margin-top:0;">FlyZed – Terms & Conditions</h4>
         
         <p><strong>1. ACCEPTANCE OF TERMS</strong></p>
-        <p>By using Ka Ndeke, you agree to these Terms & Conditions. If you do not agree, please do not use our service.</p>
+        <p>By using FlyZed, you agree to these Terms & Conditions. If you do not agree, please do not use our service.</p>
         
         <p><strong>2. AGE REQUIREMENT</strong></p>
         <p>You must be at least 18 years old to use this service. By accepting these terms, you confirm you are 18 or older.</p>
@@ -203,7 +633,7 @@
         <p>This is currently a DEMO version. No real money is involved. All balances are virtual and for testing purposes only.</p>
         
         <p><strong>4. RESPONSIBLE GAMBLING</strong></p>
-        <p>Ka Ndeke promotes responsible gambling. Please gamble responsibly and within your means:</p>
+        <p>FlyZed promotes responsible gambling. Please gamble responsibly and within your means:</p>
         <ul style="margin:10px 0;padding-left:20px;">
           <li>Set limits on how much you spend</li>
           <li>Never gamble money you cannot afford to lose</li>
@@ -215,17 +645,17 @@
         <p>All crash points are generated fairly using cryptographic seeds. You can verify fairness by viewing the proof after each round.</p>
         
         <p><strong>6. ACCOUNT RESPONSIBILITY</strong></p>
-        <p>You are responsible for keeping your account credentials secret. Ka Ndeke is not liable for unauthorized access.</p>
+        <p>You are responsible for keeping your account credentials secret. FlyZed is not liable for unauthorized access.</p>
         
         <p><strong>7. LIMITATION OF LIABILITY</strong></p>
-        <p>Ka Ndeke is provided "as is" without warranties. We are not liable for losses incurred through gameplay.</p>
+        <p>FlyZed is provided "as is" without warranties. We are not liable for losses incurred through gameplay.</p>
         
         <p><strong>8. CHANGES TO TERMS</strong></p>
-        <p>Ka Ndeke may update these terms at any time. Continued use constitutes acceptance.</p>
+        <p>FlyZed may update these terms at any time. Continued use constitutes acceptance.</p>
         
         <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:20px;">
           Last Updated: 2026-02-12<br>
-          © 2026 Ka Ndeke. All rights reserved.
+          © 2026 FlyZed. All rights reserved.
         </p>
       </div>
 
@@ -272,6 +702,46 @@
     </div>
   </div>
   
+    <!-- Admin Dashboard Modal -->
+  <div class="modal" id="adminModal">
+    <div class="modal-content" style="max-width:600px;">
+      <h3>⚙️ Admin Dashboard</h3>
+      
+      <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
+        <p style="margin:0 0 12px 0;"><strong>📊 System Status</strong></p>
+        <p style="margin:8px 0;"><span style="color:var(--muted);">Active Rounds:</span> <span id="adminActiveRounds">-</span></p>
+        <p style="margin:8px 0;"><span style="color:var(--muted);">Total Users:</span> <span id="adminUserCount">-</span></p>
+        <p style="margin:8px 0;"><span style="color:var(--muted);">RTP (24h):</span> <span id="adminRTP">-</span>%</p>
+      </div>
+
+      <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
+        <p style="margin:0 0 12px 0;"><strong>🎮 Game Controls</strong></p>
+        <div class="row">
+          <button class="btn-secondary" onclick="adminPauseGames()" style="flex:1;">⏸ Pause Games</button>
+          <button class="btn-secondary" onclick="adminResumeGames()" style="flex:1;">▶ Resume Games</button>
+        </div>
+      </div>
+
+      <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
+        <p style="margin:0 0 12px 0;"><strong>💳 Payment Controls</strong></p>
+        <div class="row">
+          <button class="btn-secondary" onclick="adminPausePayments()" style="flex:1;">⏸ Pause Payments</button>
+          <button class="btn-secondary" onclick="adminResumePayments()" style="flex:1;">▶ Resume Payments</button>
+        </div>
+      </div>
+
+      <div id="adminMessage" class="modal-message"></div>
+
+      <div class="modal-actions">
+        <button class="primary" onclick="refreshAdminDashboard()">🔄 Refresh</button>
+        <button class="btn-secondary" onclick="hideModals()">Close</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Socket.IO for real-time multiplier updates -->
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  
   <script>
     const API_BASE = 'https://ka-ndeke-backend-5dgy.onrender.com/api';
     const TOKEN_KEY = 'flyzed_token';
@@ -289,6 +759,11 @@
 	let tcAccepted = false;  // Track if user accepted T&C
 	let gamingWarningShown = false;  // Track if warning shown this session
 	let warningTimer = null;  // Timer for 30-min warning
+	let socket = null;  // Socket.IO connection
+	let useWebSocket = true;  // Toggle between WebSocket and HTTP polling
+	let lastKnownCrashPoint = null;  // Track if we know round crashed
+	let lastCrashTime = null;  // Track when crash happened
+	let localCrashDetected = false;  // Did we detect crash locally?
 
     const loginModal = document.getElementById('loginModal');
     const registerModal = document.getElementById('registerModal');
@@ -354,6 +829,7 @@
       loginBtn.classList.toggle('hidden', !!authMode);
       registerBtn.classList.toggle('hidden', !!authMode);
       logoutBtn.classList.toggle('hidden', !authMode);
+	  document.getElementById('adminBtn').classList.toggle('hidden', !authMode);  // Show admin btn when logged in
     }
 
     function showLogin() {
@@ -389,50 +865,71 @@
     }
 
     async function pollRoundStatus() {
-      try {
-        const status = await apiFetch('/game/status', { method: 'GET' }, false);
-        
-        if (!status) return;
+  // Skip if WebSocket is handling updates
+  if (useWebSocket && socket && socket.connected) {
+    return;
+  }
 
-        let liveMultiplier = 1.0;
-        if (status.startedAt && status.status === 'running') {
-          const startedMs = Number(status.startedAt);
-          const elapsedMs = Date.now() - startedMs;
-          const elapsedSec = elapsedMs / 1000;
-          liveMultiplier = 1 + (elapsedSec * 0.5);
-        } else if (status.multiplier) {
-          liveMultiplier = Number(status.multiplier);
-        }
+  try {
+    const status = await apiFetch('/game/status', { method: 'GET' }, false);
+    
+    if (!status) return;
 
-        document.getElementById('multiplier').textContent = liveMultiplier.toFixed(2) + 'x';
-        
-        const planeEl = document.getElementById('plane');
-        const translateX = Math.min(300, liveMultiplier * 30);
-        const translateY = liveMultiplier * -20;
-        planeEl.style.transform = `translateX(${translateX}px) translateY(${translateY}px) rotate(${liveMultiplier * 5}deg)`;
-
-        if (status.status === 'running' && !roundActive) {
-          roundActive = true;
-          document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
-        }
-
-        if (status.status === 'crashed' && roundActive) {
-		  roundActive = false;
-		  crashed = true;
-		  running = false;
-          document.getElementById('status').textContent = `💥 Crashed at ${liveMultiplier.toFixed(2)}x`;
-          document.getElementById('cashOutBtn').disabled = true;
-          document.getElementById('playBtn').disabled = false;
-          document.getElementById('viewProofBtn').disabled = false;  // Enable proof viewing
-		}
-      } catch (err) {
-        // Silently fail
-      }
+    let liveMultiplier = 1.0;
+    if (status.startedAt && status.status === 'running') {
+      const startedMs = Number(status.startedAt);
+      const elapsedMs = Date.now() - startedMs;
+      const elapsedSec = elapsedMs / 1000;
+      liveMultiplier = 1 + (elapsedSec * 0.5);
+    } else if (status.multiplier) {
+      liveMultiplier = Number(status.multiplier);
     }
 
-    statusPoller = setInterval(pollRoundStatus, 250);
+    // Update display
+    document.getElementById('multiplier').textContent = liveMultiplier.toFixed(2) + 'x';
+    
+    const planeEl = document.getElementById('plane');
+    const translateX = Math.min(300, liveMultiplier * 30);
+    const translateY = liveMultiplier * -20;
+    planeEl.style.transform = `translateX(${translateX}px) translateY(${translateY}px) rotate(${liveMultiplier * 5}deg)`;
 
-    async function register() {
+    if (status.status === 'running' && !roundActive) {
+      roundActive = true;
+      localCrashDetected = false;  // Reset crash detection
+      lastKnownCrashPoint = null;
+      document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
+    }
+
+    if (status.status === 'crashed' && roundActive) {
+      // ✅ STAGE 3: Detect crash and prevent cashOut race condition
+      if (!localCrashDetected) {
+        localCrashDetected = true;
+        lastCrashTime = Date.now();
+        lastKnownCrashPoint = status.multiplier || liveMultiplier;
+        
+        console.log('🛑 CRASH DETECTED - Disabling cashOut:', {
+          crashPoint: lastKnownCrashPoint,
+          detectedAt: new Date(lastCrashTime).toLocaleTimeString()
+        });
+      }
+
+      roundActive = false;
+      crashed = true;
+      running = false;
+      
+      document.getElementById('status').textContent = `💥 Crashed at ${liveMultiplier.toFixed(2)}x`;
+      document.getElementById('cashOutBtn').disabled = true;  // ✅ PREVENT CASHOUT
+      document.getElementById('playBtn').disabled = false;
+      document.getElementById('viewProofBtn').disabled = false;
+    }
+  } catch (err) {
+    // Silently fail
+  }
+}
+
+    statusPoller = setInterval(pollRoundStatus, 50);
+
+ async function register() {
   const username = document.getElementById('regName').value;
   const phone = document.getElementById('regPhone').value;
   const password = document.getElementById('regPassword').value;
@@ -507,10 +1004,27 @@
       currentUser = null;
       authMode = null;
       guestBalance = 10;
+	  adminToken = null;  // Clear admin token
+	  document.getElementById('adminBtn').classList.add('hidden');  // Hide admin button
       updateUI();
     }
 
     async function startGame() {
+	console.log('🎮 StartGame called:', {
+    authMode,
+    tcAccepted,
+    running,
+    crashed,
+    balance: authMode ? currentUser?.balance : guestBalance
+  });
+
+	// Ensure WebSocket is connected
+  if (useWebSocket && (!socket || !socket.connected)) {
+    console.warn('⚠️ WebSocket not connected, using polling fallback');
+    useWebSocket = false;
+    startHttpPolling();
+  }
+
 	// CHECK: Has user accepted T&C?
 	  if (authMode === 'server' && !tcAccepted) {
 		try {
@@ -557,6 +1071,9 @@
         multiplier = 1.0;
         running = true;
         crashed = false;
+        localCrashDetected = false;  // ✅ Reset crash state for new round
+        lastKnownCrashPoint = null;
+        crashed = false;
 
         if (authMode === 'server') {
           currentUser.balance = Number(data.balance) || 0;
@@ -578,36 +1095,73 @@
     }
 
     async function cashOut() {
-      if (crashed) return alert('Too late!');
-      if (!running) return alert('No active game');
+  // ✅ STAGE 3: Double-check crash status before sending request
+  
+  if (crashed) {
+    console.warn('❌ CashOut: Round already crashed locally');
+    return alert('Too late! Round already crashed.');
+  }
+  
+  if (!running) {
+    console.warn('❌ CashOut: Game not running');
+    return alert('No active game');
+  }
 
-      try {
-        const data = await apiFetch('/game/cashout', {
-          method: 'POST',
-          body: {}
-        }, true);
-
-        running = false;
-        crashed = true;
-        document.getElementById('cashOutBtn').disabled = true;
-        document.getElementById('playBtn').disabled = false;
-
-        if (data.success) {
-          const payout = Number(data.payout);
-          if (authMode === 'server') {
-            currentUser.balance = Number(data.balance) || 0;
-          } else {
-            guestBalance += payout;
-          }
-          updateUI();
-          document.getElementById('status').textContent = `✅ Won K ${payout.toFixed(2)}!`;
-        } else {
-          document.getElementById('status').textContent = `💥 Lost!`;
-        }
-      } catch (err) {
-        alert('Cash out failed: ' + err.message);
-      }
+  // ✅ CRITICAL: Verify crash status with backend RIGHT NOW
+  try {
+    const status = await apiFetch('/game/status', { method: 'GET' }, false);
+    
+    if (status.status !== 'running') {
+      // ✅ PREVENT RACE CONDITION: Backend says round crashed!
+      crashed = true;
+      running = false;
+      localCrashDetected = true;
+      lastKnownCrashPoint = status.multiplier;
+      
+      console.error('❌ CashOut: Backend detected crash - preventing exploit');
+      console.log('💥 Round crashed at:', lastKnownCrashPoint);
+      
+      document.getElementById('cashOutBtn').disabled = true;
+      document.getElementById('status').textContent = `💥 Crashed at ${Number(lastKnownCrashPoint).toFixed(2)}x`;
+      
+      return alert(`Too late! Round crashed at ${Number(lastKnownCrashPoint).toFixed(2)}x`);
     }
+  } catch (err) {
+    console.warn('⚠️ Could not verify crash status, proceeding with caution');
+  }
+
+  // ✅ If we get here, round is definitely still running
+  try {
+    const data = await apiFetch('/game/cashout', {
+      method: 'POST',
+      body: {}
+    }, true);
+
+    running = false;
+    crashed = true;
+    document.getElementById('cashOutBtn').disabled = true;
+    document.getElementById('playBtn').disabled = false;
+
+    if (data.success) {
+      const payout = Number(data.payout);
+      if (authMode === 'server') {
+        currentUser.balance = Number(data.balance) || 0;
+      } else {
+        guestBalance += payout;
+      }
+      updateUI();
+      document.getElementById('status').textContent = `✅ Won K ${payout.toFixed(2)}!`;
+      
+      console.log('✅ CashOut successful:', { payout, multiplier: data.multiplier });
+    } else {
+      document.getElementById('status').textContent = `💥 Lost!`;
+      console.log('❌ CashOut: Lost round');
+    }
+  } catch (err) {
+    alert('Cash out failed: ' + err.message);
+    console.error('CashOut error:', err);
+  }
+}
 
     // ============ DEPOSIT ============
     async function deposit() {
@@ -743,6 +1297,148 @@
         }
       }
     })();
+	
+// ============ STAGE 3: SYNC VERIFICATION ============
+
+// Verify sync on startup
+window.addEventListener('load', () => {
+  setTimeout(async () => {
+    try {
+      const status = await apiFetch('/game/status', { method: 'GET' }, false);
+      console.log('✅ Frontend-Backend sync verified:', {
+        roundId: status.roundId,
+        status: status.status,
+        multiplier: status.multiplier,
+        serverTime: new Date().toISOString()
+      });
+    } catch (err) {
+      console.warn('⚠️ Could not verify sync:', err.message);
+    }
+  }, 500);
+});
+
+// ============ END STAGE 3 ============
+
+
+// ============ STAGE 6: ADMIN DASHBOARD ============
+
+let adminToken = null;  // Store admin token if available
+
+function openAdminDashboard() {
+  adminToken = prompt('Enter Admin Token:');
+  if (!adminToken) return;
+  
+  document.getElementById('adminModal').classList.add('show');
+  refreshAdminDashboard();
+}
+
+async function refreshAdminDashboard() {
+  if (!adminToken) return;
+  
+  try {
+    const health = await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/health', {
+      headers: { 'x-admin-token': adminToken }
+    }).then(r => r.json());
+    
+    document.getElementById('adminActiveRounds').textContent = health.activeRounds || 0;
+    document.getElementById('adminUserCount').textContent = health.userCount || 0;
+    
+    const rtp = await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/rtp', {
+      headers: { 'x-admin-token': adminToken }
+    }).then(r => r.json());
+    
+    document.getElementById('adminRTP').textContent = (rtp.rtp || 0).toFixed(2);
+    
+    showAdminMessage('✅ Dashboard updated', false);
+  } catch (err) {
+    showAdminMessage('❌ ' + err.message, true);
+  }
+}
+
+function showAdminMessage(msg, isError) {
+  const el = document.getElementById('adminMessage');
+  el.textContent = msg;
+  el.className = `modal-message ${isError ? 'error' : 'success'}`;
+}
+
+async function adminPauseGames() {
+  if (!adminToken) return;
+  
+  try {
+    await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/pause', {
+      method: 'POST',
+      headers: {
+        'x-admin-token': adminToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ target: 'games', reason: 'Admin pause' })
+    });
+    
+    showAdminMessage('✅ Games paused', false);
+  } catch (err) {
+    showAdminMessage('❌ ' + err.message, true);
+  }
+}
+
+async function adminResumeGames() {
+  if (!adminToken) return;
+  
+  try {
+    await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/resume', {
+      method: 'POST',
+      headers: {
+        'x-admin-token': adminToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ target: 'games', reason: 'Admin resume' })
+    });
+    
+    showAdminMessage('✅ Games resumed', false);
+  } catch (err) {
+    showAdminMessage('❌ ' + err.message, true);
+  }
+}
+
+async function adminPausePayments() {
+  if (!adminToken) return;
+  
+  try {
+    await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/pause', {
+      method: 'POST',
+      headers: {
+        'x-admin-token': adminToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ target: 'payments', reason: 'Admin pause' })
+    });
+    
+    showAdminMessage('✅ Payments paused', false);
+  } catch (err) {
+    showAdminMessage('❌ ' + err.message, true);
+  }
+}
+
+async function adminResumePayments() {
+  if (!adminToken) return;
+  
+  try {
+    await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/resume', {
+      method: 'POST',
+      headers: {
+        'x-admin-token': adminToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ target: 'payments', reason: 'Admin resume' })
+    });
+    
+    showAdminMessage('✅ Payments resumed', false);
+  } catch (err) {
+    showAdminMessage('❌ ' + err.message, true);
+  }
+}
+
+// ============ END STAGE 6 ============
+
 	// ============ STAGE 7: PROVABLY FAIR ============
 
 async function viewProof() {
@@ -787,6 +1483,123 @@ function copyProof() {
 }
 
 // ============ END STAGE 7 ============
+
+// ============ STAGE 8: REAL-TIME ENGINE (WebSockets) ============
+
+function initializeSocket() {
+  if (!useWebSocket) {
+    console.log('WebSocket disabled, using HTTP polling');
+    return;
+  }
+
+  try {
+    console.log('🔌 Initializing Socket.IO connection...');
+    
+    socket = io(API_BASE.replace('/api', ''), {
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
+      transports: ['websocket', 'polling']  // Fallback to polling if WebSocket fails
+    });
+
+    socket.on('connect', () => {
+      console.log('✅ Socket.IO connected:', socket.id);
+      document.title = '🛩️ FlyZed (Live)';  // Show live status
+    });
+
+    socket.on('multiplier', (data) => {
+      try {
+        if (!data) return;
+        
+        // Update multiplier display
+        const multiplier = Number(data.multiplier || 1).toFixed(2);
+        document.getElementById('multiplier').textContent = multiplier + 'x';
+        
+        // Update plane animation
+        const planeEl = document.getElementById('plane');
+        const translateX = Math.min(300, multiplier * 30);
+        const translateY = multiplier * -20;
+        planeEl.style.transform = `translateX(${translateX}px) translateY(${translateY}px) rotate(${multiplier * 5}deg)`;
+        
+        // Update status if round is running
+        if (data.status === 'running') {
+          if (!roundActive) {
+            roundActive = true;
+            document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
+          }
+        }
+      } catch (err) {
+        console.warn('Error processing multiplier:', err);
+      }
+    });
+
+    socket.on('crash', (data) => {
+      try {
+        if (!data) return;
+        
+        // Round has crashed
+        if (roundActive) {
+          roundActive = false;
+          crashed = true;
+          running = false;
+          
+          const crashPoint = Number(data.crashPoint || 1).toFixed(2);
+          document.getElementById('status').textContent = `💥 Crashed at ${crashPoint}x`;
+          document.getElementById('cashOutBtn').disabled = true;
+          document.getElementById('playBtn').disabled = false;
+          document.getElementById('viewProofBtn').disabled = false;  // Enable proof viewing
+          
+          console.log('💥 Round crashed at:', crashPoint);
+        }
+      } catch (err) {
+        console.warn('Error processing crash:', err);
+      }
+    });
+
+    socket.on('roundStarted', (data) => {
+      try {
+        console.log('🎮 Round started:', data);
+        roundActive = true;
+        document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
+      } catch (err) {
+        console.warn('Error processing roundStarted:', err);
+      }
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.warn('⚠️ Socket.IO disconnected:', reason);
+      document.title = '🛩️ FlyZed (Reconnecting...)';
+      
+      // Fallback to HTTP polling if WebSocket fails
+      if (useWebSocket && reason !== 'io client namespace disconnect') {
+        console.log('Falling back to HTTP polling...');
+        startHttpPolling();
+      }
+    });
+
+    socket.on('error', (error) => {
+      console.error('❌ Socket.IO error:', error);
+      document.title = '🛩️ FlyZed (Error)';
+    });
+
+  } catch (err) {
+    console.error('Failed to initialize Socket.IO:', err);
+    console.log('Falling back to HTTP polling...');
+    useWebSocket = false;
+    startHttpPolling();
+  }
+}
+
+function startHttpPolling() {
+  console.log('📡 Starting HTTP polling fallback...');
+  if (!statusPoller) {
+	statusPoller = setInterval(pollRoundStatus, 50);  // 50ms for even tighter sync
+  }
+}
+
+// ============ END STAGE 8 ============
+
 // ============ STAGE 11: LEGAL COMPLIANCE ============
 
 async function showTC() {
@@ -883,6 +1696,25 @@ function selfExclude() {
 }
 
 // ============ END STAGE 11 ============
+
+// Initialize WebSocket on page load
+window.addEventListener('load', () => {
+  console.log('🚀 Page loaded, initializing real-time engine...');
+  initializeSocket();
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+  if (socket) {
+    socket.disconnect();
+  }
+  if (statusPoller) {
+    clearInterval(statusPoller);
+  }
+  if (warningTimer) {
+    clearTimeout(warningTimer);
+  }
+});
   </script>
 </body>
 </html>
