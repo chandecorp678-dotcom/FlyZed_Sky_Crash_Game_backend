@@ -380,4 +380,27 @@ router.post('/callback', express.json(), wrapAsync(async (req, res) => {
   }
 }));
 
+// GET payment details
+router.get('/details/:paymentId', requireAuth, wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const paymentId = req.params.paymentId;
+
+  try {
+    const result = await db.query(
+      `SELECT id, user_id, type, amount, status, mtn_transaction_id, mtn_status, created_at, updated_at
+       FROM payments WHERE id = $1 AND user_id = $2`,
+      [paymentId, req.user.id]
+    );
+
+    if (!result.rowCount) {
+      return sendError(res, 404, 'Payment not found');
+    }
+
+    return res.json({ ok: true, payment: result.rows[0] });
+  } catch (err) {
+    logger.error('payments.details.error', { paymentId, message: err.message });
+    return sendError(res, 500, 'Failed to fetch payment details');
+  }
+}));
+
 module.exports = router;
