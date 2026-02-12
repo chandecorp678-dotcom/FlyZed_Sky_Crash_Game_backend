@@ -14,6 +14,7 @@ const { runTransaction } = require('./dbHelper');
  * GET /api/payments/status/:transactionId - Check payment status
  * POST /api/payments/callback - MTN webhook callback
  * GET /api/payments/history - User's transaction history
+ * GET /api/payments/details/:paymentId - Get payment details
  */
 
 const DEPOSIT_MIN = Number(process.env.PAYMENT_MIN_AMOUNT || 10);
@@ -23,16 +24,23 @@ const WITHDRAWAL_MAX = Number(process.env.PAYMENT_MAX_AMOUNT || 5000);
 
 /**
  * Auth middleware: require logged-in user
+ * ✅ FIXED: Removed async, just call next()
  */
-async function requireAuth(req, res, next) {
+function requireAuth(req, res, next) {
   if (!req.user || !req.user.id) {
     return sendError(res, 401, 'Authentication required');
   }
   next();
 }
 
-// Apply auth to all payment routes
-router.use(requireAuth);
+// Apply auth to all payment routes except callback
+router.use((req, res, next) => {
+  // Allow callback without auth (webhook from MTN)
+  if (req.path === '/callback') {
+    return next();
+  }
+  requireAuth(req, res, next);
+});
 
 /**
  * POST /api/payments/deposit
@@ -56,6 +64,7 @@ router.post('/deposit', express.json(), wrapAsync(async (req, res) => {
     return sendError(res, 400, 'Phone number required');
   }
 
+  // ✅ Use mtnPayments.normalizePhoneNumber
   const normalizedPhone = mtnPayments.normalizePhoneNumber(phone);
   if (!normalizedPhone) {
     return sendError(res, 400, 'Invalid phone number format');
@@ -133,6 +142,7 @@ router.post('/withdraw', express.json(), wrapAsync(async (req, res) => {
     return sendError(res, 400, 'Phone number required');
   }
 
+  // ✅ Use mtnPayments.normalizePhoneNumber
   const normalizedPhone = mtnPayments.normalizePhoneNumber(phone);
   if (!normalizedPhone) {
     return sendError(res, 400, 'Invalid phone number format');
@@ -301,9 +311,35 @@ router.get('/history', wrapAsync(async (req, res) => {
 }));
 
 /**
+ * GET /api/payments/details/:paymentId
+ * Get payment details
+ */
+router.get('/details/:paymentId', wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const paymentId = req.params.paymentId;
+
+  try {
+    const result = await db.query(
+      `SELECT id, user_id, type, amount, status, mtn_transaction_id, mtn_status, created_at, updated_at
+       FROM payments WHERE id = $1 AND user_id = $2`,
+      [paymentId, req.user.id]
+    );
+
+    if (!result.rowCount) {
+      return sendError(res, 404, 'Payment not found');
+    }
+
+    return res.json({ ok: true, payment: result.rows[0] });
+  } catch (err) {
+    logger.error('payments.details.error', { paymentId, message: err.message });
+    return sendError(res, 500, 'Failed to fetch payment details');
+  }
+}));
+
+/**
  * POST /api/payments/callback
  * MTN webhook callback (called by MTN when payment status changes)
- * Body: { referenceId, status, externalId, amount, ... }
+ * ⚠️ This endpoint is public (no auth required) because MTN sends webhook
  */
 router.post('/callback', express.json(), wrapAsync(async (req, res) => {
   const db = req.app.locals.db;
@@ -377,29 +413,6 @@ router.post('/callback', express.json(), wrapAsync(async (req, res) => {
     logger.error('payments.callback.error', { message: err.message, payload: JSON.stringify(payload).slice(0, 200) });
     // Return 500 so MTN knows to retry, but log it
     return sendError(res, 500, 'Callback processing failed');
-  }
-}));
-
-// GET payment details
-router.get('/details/:paymentId', requireAuth, wrapAsync(async (req, res) => {
-  const db = req.app.locals.db;
-  const paymentId = req.params.paymentId;
-
-  try {
-    const result = await db.query(
-      `SELECT id, user_id, type, amount, status, mtn_transaction_id, mtn_status, created_at, updated_at
-       FROM payments WHERE id = $1 AND user_id = $2`,
-      [paymentId, req.user.id]
-    );
-
-    if (!result.rowCount) {
-      return sendError(res, 404, 'Payment not found');
-    }
-
-    return res.json({ ok: true, payment: result.rows[0] });
-  } catch (err) {
-    logger.error('payments.details.error', { paymentId, message: err.message });
-    return sendError(res, 500, 'Failed to fetch payment details');
   }
 }));
 
