@@ -30,6 +30,7 @@ function sanitizeUser(row) {
     phone: row.phone,
     balance: Number(row.balance || 0),  // ✅ FORCE NUMBER
     freeRounds: Number(row.freerounds || 0),  // ✅ FORCE NUMBER
+    zilsUuid: row.zils_uuid,  // ✅ ADD: Include in response
     createdAt: row.createdat,
     updatedAt: row.updatedat,
   };
@@ -96,13 +97,15 @@ router.post("/auth/register",
       }
 
       const id = uuidv4();
+       const zilsUuid = uuidv4();  // ✅ ADD: Generate Zils UUID
       const now = new Date().toISOString();
       const password_hash = await bcrypt.hash(trimmedPassword, 10);
 
+      // ✅ ADD: Insert with zils_uuid column
       await db.query(
         `INSERT INTO users (id, username, phone, password_hash, balance, freerounds, createdat, updatedat)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [id, trimmedUsername, trimmedPhone, password_hash, 0, 0, now, now]
+        [id, trimmedUsername, trimmedPhone, password_hash, 0, 0, zilsUuid, now, now]
       );
 
       const userRow = await db.query("SELECT * FROM users WHERE id = $1", [id]);
