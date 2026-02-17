@@ -8,7 +8,7 @@ const crypto = require('crypto');
  * ZILS LOGISTICS PAYMENT GATEWAY
  * Handles deposits (collections) and withdrawals (disbursements)
  * 
- * FIXED: Use complete endpoint URLs from environment
+ * TOKEN LOCATION: Both Headers AND Body (per Zils requirement)
  */
 
 const ZILS_COLLECTIONS_URL = process.env.ZILS_COLLECTIONS_URL || 'https://collections.zilslogistics.com/api/v1/wallets/external';
@@ -23,7 +23,8 @@ if (!ZILS_API_TOKEN) {
 logger.info('zils.initialized', { 
   collectionsUrl: ZILS_COLLECTIONS_URL,
   disbursementsUrl: ZILS_DISBURSEMENTS_URL,
-  merchantPhone: ZILS_MERCHANT_PHONE
+  merchantPhone: ZILS_MERCHANT_PHONE,
+  tokenLocation: 'BOTH Headers AND Body'  // ← NEW
 });
 
 /**
@@ -44,7 +45,7 @@ function httpsRequest(method, fullUrl, headers = {}, body = null) {
         method: method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ZILS_API_TOKEN}`,
+          'Authorization': `Bearer ${ZILS_API_TOKEN}`,  // ← Token in headers
           ...headers
         },
         timeout: 30000
@@ -95,13 +96,13 @@ function httpsRequest(method, fullUrl, headers = {}, body = null) {
  * 
  * @param {string} customerPhone - Customer's phone number (e.g., "0768031801")
  * @param {number} amount - Amount to deposit (integer, e.g., 100 for K100)
- * @param {string} customerUUID - Customer's unique UUID
+ * @param {string} transactionUUID - Transaction UUID (generated per request)
  * @returns {object} { transactionId, status, amount }
  */
-async function deposit(customerPhone, amount, customerUUID) {
+async function deposit(customerPhone, amount, transactionUUID) {
   try {
-    if (!customerPhone || !amount || !customerUUID) {
-      throw new Error('Missing required parameters: customerPhone, amount, customerUUID');
+    if (!customerPhone || !amount || !transactionUUID) {
+      throw new Error('Missing required parameters: customerPhone, amount, transactionUUID');
     }
 
     const numAmount = Number(amount);
@@ -112,40 +113,40 @@ async function deposit(customerPhone, amount, customerUUID) {
     // Normalize phone (remove + if present)
     const normalizedPhone = String(customerPhone).replace('+', '').trim();
 
-    const transactionId = crypto.randomUUID();
     const requestBody = {
       amount: numAmount,
       sender: normalizedPhone,  // Customer sends money
       receiver: ZILS_MERCHANT_PHONE,  // To merchant account
-      uuid: customerUUID,  // Customer's permanent UUID
-      description: `FlyZed Deposit - ${customerUUID}`
+      uuid: transactionUUID,  // ← NEW: Use transaction UUID (not permanent)
+      token: ZILS_API_TOKEN,  // ← NEW: Token in body as well
+      description: `FlyZed Deposit - ${transactionUUID}`
     };
 
     logger.info('zils.deposit.start', { 
       customerPhone: normalizedPhone, 
       amount: numAmount, 
-      customerUUID,
-      transactionId
+      transactionUUID,
+      tokenInBody: true  // ← NEW: Log that token is in body
     });
 
-    // ✅ FIXED: Use complete URL from environment
+    // ✅ Use complete URL from environment
     const response = await httpsRequest(
       'POST',
       ZILS_COLLECTIONS_URL,
       {},
-      requestBody
+      requestBody  // ← Body now includes token
     );
 
     if (response.status >= 200 && response.status < 300) {
       logger.info('zils.deposit.success', { 
-        transactionId, 
+        transactionUUID, 
         customerPhone: normalizedPhone, 
         amount: numAmount,
         responseBody: response.body
       });
       
       return {
-        transactionId,
+        transactionId: response.body.txnId || transactionUUID,  // ← Use Zils txnId if provided
         status: 'pending',
         amount: numAmount,
         customerPhone: normalizedPhone,
@@ -156,7 +157,8 @@ async function deposit(customerPhone, amount, customerUUID) {
       logger.error('zils.deposit.failed', { 
         status: response.status, 
         body: response.body, 
-        customerPhone: normalizedPhone 
+        customerPhone: normalizedPhone,
+        transactionUUID
       });
       throw new Error(`Zils API error: ${response.status} - ${JSON.stringify(response.body)}`);
     }
@@ -164,7 +166,8 @@ async function deposit(customerPhone, amount, customerUUID) {
     logger.error('zils.deposit.error', { 
       message: err.message, 
       customerPhone: customerPhone,
-      amount: amount 
+      amount: amount,
+      transactionUUID: transactionUUID
     });
     throw err;
   }
@@ -176,13 +179,13 @@ async function deposit(customerPhone, amount, customerUUID) {
  * 
  * @param {string} customerPhone - Customer's phone number (e.g., "0768031801")
  * @param {number} amount - Amount to withdraw (integer, e.g., 100 for K100)
- * @param {string} customerUUID - Customer's unique UUID
+ * @param {string} transactionUUID - Transaction UUID (generated per request)
  * @returns {object} { transactionId, status, amount }
  */
-async function withdrawal(customerPhone, amount, customerUUID) {
+async function withdrawal(customerPhone, amount, transactionUUID) {
   try {
-    if (!customerPhone || !amount || !customerUUID) {
-      throw new Error('Missing required parameters: customerPhone, amount, customerUUID');
+    if (!customerPhone || !amount || !transactionUUID) {
+      throw new Error('Missing required parameters: customerPhone, amount, transactionUUID');
     }
 
     const numAmount = Number(amount);
@@ -193,40 +196,40 @@ async function withdrawal(customerPhone, amount, customerUUID) {
     // Normalize phone
     const normalizedPhone = String(customerPhone).replace('+', '').trim();
 
-    const transactionId = crypto.randomUUID();
     const requestBody = {
       amount: numAmount,
       sender: ZILS_MERCHANT_PHONE,  // Merchant sends money
       receiver: normalizedPhone,  // To customer
-      uuid: customerUUID,  // Customer's permanent UUID
-      description: `FlyZed Withdrawal - ${customerUUID}`
+      uuid: transactionUUID,  // ← NEW: Use transaction UUID (not permanent)
+      token: ZILS_API_TOKEN,  // ← NEW: Token in body as well
+      description: `FlyZed Withdrawal - ${transactionUUID}`
     };
 
     logger.info('zils.withdrawal.start', { 
       customerPhone: normalizedPhone, 
       amount: numAmount, 
-      customerUUID,
-      transactionId
+      transactionUUID,
+      tokenInBody: true  // ← NEW: Log that token is in body
     });
 
-    // ✅ FIXED: Use complete URL from environment
+    // ✅ Use complete URL from environment
     const response = await httpsRequest(
       'POST',
       ZILS_DISBURSEMENTS_URL,
       {},
-      requestBody
+      requestBody  // ← Body now includes token
     );
 
     if (response.status >= 200 && response.status < 300) {
       logger.info('zils.withdrawal.success', { 
-        transactionId, 
+        transactionUUID, 
         customerPhone: normalizedPhone, 
         amount: numAmount,
         responseBody: response.body
       });
       
       return {
-        transactionId,
+        transactionId: response.body.txnId || transactionUUID,  // ← Use Zils txnId if provided
         status: 'pending',
         amount: numAmount,
         customerPhone: normalizedPhone,
@@ -237,7 +240,8 @@ async function withdrawal(customerPhone, amount, customerUUID) {
       logger.error('zils.withdrawal.failed', { 
         status: response.status, 
         body: response.body, 
-        customerPhone: normalizedPhone 
+        customerPhone: normalizedPhone,
+        transactionUUID
       });
       throw new Error(`Zils API error: ${response.status} - ${JSON.stringify(response.body)}`);
     }
@@ -245,7 +249,8 @@ async function withdrawal(customerPhone, amount, customerUUID) {
     logger.error('zils.withdrawal.error', { 
       message: err.message, 
       customerPhone: customerPhone,
-      amount: amount 
+      amount: amount,
+      transactionUUID: transactionUUID
     });
     throw err;
   }
@@ -269,10 +274,15 @@ async function checkTransactionStatus(transactionId) {
     // ✅ Query on collections endpoint with transaction ID
     const statusUrl = `${ZILS_COLLECTIONS_URL}/${transactionId}`;
 
+    const requestBody = {
+      token: ZILS_API_TOKEN  // ← NEW: Token in body for status check
+    };
+
     const response = await httpsRequest(
       'GET',
       statusUrl,
-      {}
+      {},
+      requestBody  // ← Include token in body
     );
 
     if (response.status >= 200 && response.status < 300) {
