@@ -5,7 +5,7 @@
   <title>FlyZed – Sky Crash Game</title>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#03101f" />
-    <style>
+  <style>
     :root{
       --bg:#0a0e27;
       --bg-secondary:#111829;
@@ -22,482 +22,60 @@
       --shadow: 0 8px 32px rgba(0, 212, 255, 0.1);
       --shadow-hover: 0 12px 48px rgba(0, 212, 255, 0.2);
     }
-    
-    * { 
-      box-sizing: border-box; 
-    }
-    
-    html,body{
-      height:100%;
-      margin:0;
-      padding:0;
-      background:var(--bg);
-      color:var(--white);
-      -webkit-font-smoothing:antialiased;
-      font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      font-size: 16px;
-    }
-
-    header{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      padding:16px 20px;
-      background:var(--panel);
-      position:sticky;
-      top:0;
-      z-index:30;
-      border-bottom:2px solid rgba(0, 212, 255, 0.1);
-      box-shadow: var(--shadow);
-    }
-    
-    header h1{
-      margin:0;
-      font-size:24px;
-      color:var(--accent);
-      font-weight:700;
-      display:flex;
-      align-items:center;
-      gap:8px;
-      letter-spacing: 1px;
-    }
-    
-    .header-right{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-
-    .panel{
-      padding:16px;
-      text-align:left;
-      background:var(--panel);
-      border-radius:12px;
-      margin:12px;
-      box-shadow: var(--shadow);
-    }
-    
-    #userInfo{
-      font-size:14px;
-      color:var(--muted);
-      line-height: 1.6;
-    }
-    
-    #username{
-      font-weight:700;
-      color:var(--accent);
-    }
-    
-    #balance{
-      color:var(--success);
-      font-weight:700;
-      font-size: 16px;
-    }
-
-    .game-box{
-      margin:12px;
-      border-radius:16px;
-      background:linear-gradient(135deg, #1a2f4a 0%, #0a1f35 100%);
-      padding:24px;
-      min-height:350px;
-      position:relative;
-      overflow:hidden;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      flex-direction:column;
-      border:2px solid rgba(0, 212, 255, 0.2);
-      box-shadow: var(--shadow);
-    }
-    
-    .game-content{
-      display:flex;
-      align-items:center;
-      gap:40px;
-      width:100%;
-      justify-content:center;
-    }
-    
-    #multiplier{
-      font-size:56px;
-      font-weight:900;
-      color:var(--accent);
-      margin:0;
-      min-width:180px;
-      text-align:center;
-      font-family:'Courier New', monospace;
-      letter-spacing: 2px;
-      text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
-      animation: pulse 0.5s ease-in-out infinite alternate;
-    }
-    
-    @keyframes pulse {
-      from { transform: scale(1); }
-      to { transform: scale(1.05); }
-    }
-    
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(-20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    
-    #plane{
-      width:140px;
-      height:70px;
-      transition:all 0.1s linear;
-      will-change:transform;
-      filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.4));
-    }
-    
-    #status{
-      font-size:16px;
-      color:var(--muted);
-      margin-top:24px;
-      text-align:center;
-      width:100%;
-      min-height:40px;
-      animation: fadeIn 0.5s ease-in;
-      font-weight: 500;
-    }
-
-    .controls{
-      padding:16px;
-      display:flex;
-      flex-direction:column;
-      gap:12px;
-      align-items:stretch;
-      background:var(--panel);
-      margin:12px;
-      border-radius:12px;
-      box-shadow: var(--shadow);
-    }
-    
-    .row{
-      display:flex;
-      gap:12px;
-      width:100%;
-      align-items:center;
-    }
-    
-    input[type=number],input[type=text],input[type=password]{
-      padding:12px 16px;
-      border-radius:10px;
-      border:2px solid rgba(0, 212, 255, 0.2);
-      background:var(--bg-secondary);
-      color:var(--white);
-      flex:1;
-      font-size:15px;
-      transition: all 0.3s ease;
-    }
-    
-    input[type=number]:focus,input[type=text]:focus,input[type=password]:focus{
-      border-color:var(--accent);
-      outline: none;
-      box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
-      background: rgba(0, 212, 255, 0.05);
-    }
-    
-    button{
-      cursor:pointer;
-      border:none;
-      border-radius:10px;
-      padding:12px 18px;
-      font-weight:700;
-      transition: all 0.3s ease;
-      font-size:14px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    
-    button:active {
-      transform: scale(0.98);
-    }
-    
-    .primary{
-      background:linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-      color:#000;
-      padding:14px 20px;
-      flex:1;
-      font-weight:800;
-      box-shadow: var(--shadow);
-    }
-    
-    .primary:hover:not(:disabled){
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-hover);
-    }
-    
-    .primary:disabled{
-      opacity:0.4;
-      cursor:not-allowed;
-    }
-    
-    .danger{
-      background:linear-gradient(135deg, var(--danger) 0%, #cc1a4a 100%);
-      color:#fff;
-      padding:14px 20px;
-      flex:1;
-      font-weight:800;
-      box-shadow: var(--shadow);
-    }
-    
-    .danger:hover:not(:disabled){
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-hover);
-    }
-    
-    .danger:disabled{
-      opacity:0.4;
-      cursor:not-allowed;
-    }
-    
-    .btn-secondary{
-      background:rgba(0, 212, 255, 0.1);
-      color:var(--accent);
-      border:2px solid rgba(0, 212, 255, 0.2);
-      transition: all 0.3s ease;
-    }
-    
-    .btn-secondary:hover{
-      background:rgba(0, 212, 255, 0.2);
-      border-color:var(--accent);
-      transform: translateY(-2px);
-    }
-
-    .wallet-row{
-      display:flex;
-      gap:10px;
-      justify-content:center;
-      flex-wrap:wrap;
-      margin-top: 8px;
-    }
-    
-    .wallet-row button{
-      background:linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 212, 255, 0.05) 100%);
-      color:var(--accent);
-      border-radius:10px;
-      padding:12px 16px;
-      font-weight:600;
-      flex:0;
-      border:2px solid rgba(0, 212, 255, 0.2);
-    }
-    
-    .wallet-row button:hover {
-      background:linear-gradient(135deg, rgba(0, 212, 255, 0.25) 0%, rgba(0, 212, 255, 0.1) 100%);
-      border-color:var(--accent);
-    }
-
-    .modal{
-      position:fixed;
-      top:0;
-      left:0;
-      width:100%;
-      height:100%;
-      background:rgba(0, 0, 0, 0.85);
-      backdrop-filter: blur(5px);
-      display:none;
-      align-items:center;
-      justify-content:center;
-      z-index:1000;
-      padding:12px;
-      animation: fadeIn 0.3s ease;
-    }
-    
-    .modal.show{
-      display:flex;
-    }
-    
-    .modal-content{
-      background:var(--panel);
-      padding:28px;
-      border-radius:16px;
-      color:var(--white);
-      width:100%;
-      max-width:480px;
-      max-height:90vh;
-      overflow:auto;
-      border:2px solid rgba(0, 212, 255, 0.2);
-      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
-      animation: slideIn 0.3s ease;
-    }
-    
-    .modal h3{
-      margin-top:0;
-      margin-bottom:20px;
-      color:var(--accent);
-      font-size: 20px;
-      letter-spacing: 0.5px;
-    }
-    
-    .modal input{
-      width:100%;
-      margin-bottom:12px;
-      padding:12px 16px;
-      border-radius:10px;
-      border:2px solid rgba(0, 212, 255, 0.2);
-      background:var(--bg-secondary);
-      color:var(--white);
-      transition: all 0.3s ease;
-    }
-    
-    .modal input:focus {
-      border-color:var(--accent);
-      outline: none;
-      box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
-    }
-    
-    .modal-actions{
-      display:flex;
-      gap:10px;
-      margin-top:20px;
-    }
-    
-    .modal-actions button{
-      flex:1;
-    }
-    
-    .modal-message{
-      margin:12px 0;
-      padding:14px;
-      border-radius:8px;
-      font-size:13px;
-      display:none;
-      font-weight: 600;
-      border-left: 4px solid transparent;
-    }
-    
-    .modal-message.error{
-      background:rgba(255, 51, 102, 0.15);
-      color:var(--danger);
-      display:block;
-      border-left-color:var(--danger);
-    }
-    
-    .modal-message.success{
-      background:rgba(0, 217, 129, 0.15);
-      color:var(--success);
-      display:block;
-      border-left-color:var(--success);
-    }
-
-    .hidden{
-      display:none !important;
-    }
-    
-    main{
-      padding-bottom:120px;
-      background:var(--bg);
-    }
-
-    /* Scrollbar styling */
-    ::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: var(--bg-secondary);
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: rgba(0, 212, 255, 0.3);
-      border-radius: 4px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: rgba(0, 212, 255, 0.5);
-    }
-
-    /* Mobile optimization */
-    @media (max-width:768px){
-      header h1{
-        font-size:20px;
-      }
-      
-      .game-box{
-        min-height:300px;
-        padding:16px;
-      }
-      
-      .game-content{
-        flex-direction:column;
-        gap:20px;
-      }
-      
-      #multiplier{
-        font-size:48px;
-      }
-      
-      #plane{
-        width:100px;
-        height:50px;
-      }
-      
-      .controls{
-        padding:12px;
-        gap:10px;
-      }
-      
-      input[type=number]{
-        font-size:16px;
-      }
-      
-      button {
-        padding: 14px 16px;
-        font-size: 13px;
-      }
-      
-      .row{
-        flex-direction:column;
-      }
-      
-      .row input,
-      .row button{
-        width:100%;
-      }
-      
-      .modal-content{
-        max-width:90%;
-        padding:20px;
-      }
-    }
-
-    @media (max-width:480px){
-      header{
-        padding:12px 16px;
-      }
-      
-      header h1{
-        font-size:18px;
-      }
-      
-      #multiplier{
-        font-size:40px;
-      }
-      
-      .game-box{
-        margin:8px;
-      }
-      
-      .controls{
-        margin:8px;
-      }
-      
-      button {
-        padding: 12px 14px;
-        font-size: 12px;
-      }
-    }
-
-    button:focus,input:focus{
-      outline:none;
-    }
+    * { box-sizing: border-box; }
+    html,body{height:100%;margin:0;padding:0;background:var(--bg);color:var(--white);-webkit-font-smoothing:antialiased;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;font-size: 16px;}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;background:var(--panel);position:sticky;top:0;z-index:30;border-bottom:2px solid rgba(0, 212, 255, 0.1);box-shadow: var(--shadow);}
+    header h1{margin:0;font-size:24px;color:var(--accent);font-weight:700;display:flex;align-items:center;gap:8px;letter-spacing: 1px;}
+    .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+    .panel{padding:16px;text-align:left;background:var(--panel);border-radius:12px;margin:12px;box-shadow: var(--shadow);}
+    #userInfo{font-size:14px;color:var(--muted);line-height: 1.6;}
+    #username{font-weight:700;color:var(--accent);}
+    #balance{color:var(--success);font-weight:700;font-size: 16px;}
+    .game-box{margin:12px;border-radius:16px;background:linear-gradient(135deg, #1a2f4a 0%, #0a1f35 100%);padding:24px;min-height:350px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-direction:column;border:2px solid rgba(0, 212, 255, 0.2);box-shadow: var(--shadow);}
+    .game-content{display:flex;align-items:center;gap:40px;width:100%;justify-content:center;}
+    #multiplier{font-size:56px;font-weight:900;color:var(--accent);margin:0;min-width:180px;text-align:center;font-family:'Courier New', monospace;letter-spacing: 2px;text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);animation: pulse 0.5s ease-in-out infinite alternate;}
+    @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.05); } }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    #plane{width:140px;height:70px;transition:all 0.1s linear;will-change:transform;filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.4));}
+    #status{font-size:16px;color:var(--muted);margin-top:24px;text-align:center;width:100%;min-height:40px;animation: fadeIn 0.5s ease-in;font-weight: 500;}
+    .controls{padding:16px;display:flex;flex-direction:column;gap:12px;align-items:stretch;background:var(--panel);margin:12px;border-radius:12px;box-shadow: var(--shadow);}
+    .row{display:flex;gap:12px;width:100%;align-items:center;}
+    input[type=number],input[type=text],input[type=password]{padding:12px 16px;border-radius:10px;border:2px solid rgba(0, 212, 255, 0.2);background:var(--bg-secondary);color:var(--white);flex:1;font-size:15px;transition: all 0.3s ease;}
+    input[type=number]:focus,input[type=text]:focus,input[type=password]:focus{border-color:var(--accent);outline: none;box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);background: rgba(0, 212, 255, 0.05);}
+    button{cursor:pointer;border:none;border-radius:10px;padding:12px 18px;font-weight:700;transition: all 0.3s ease;font-size:14px;text-transform: uppercase;letter-spacing: 0.5px;}
+    button:active { transform: scale(0.98); }
+    .primary{background:linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);color:#000;padding:14px 20px;flex:1;font-weight:800;box-shadow: var(--shadow);}
+    .primary:hover:not(:disabled){transform: translateY(-2px);box-shadow: var(--shadow-hover);}
+    .primary:disabled{opacity:0.4;cursor:not-allowed;}
+    .danger{background:linear-gradient(135deg, var(--danger) 0%, #cc1a4a 100%);color:#fff;padding:14px 20px;flex:1;font-weight:800;box-shadow: var(--shadow);}
+    .danger:hover:not(:disabled){transform: translateY(-2px);box-shadow: var(--shadow-hover);}
+    .danger:disabled{opacity:0.4;cursor:not-allowed;}
+    .btn-secondary{background:rgba(0, 212, 255, 0.1);color:var(--accent);border:2px solid rgba(0, 212, 255, 0.2);transition: all 0.3s ease;}
+    .btn-secondary:hover{background:rgba(0, 212, 255, 0.2);border-color:var(--accent);transform: translateY(-2px);}
+    .wallet-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top: 8px;}
+    .wallet-row button{background:linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 212, 255, 0.05) 100%);color:var(--accent);border-radius:10px;padding:12px 16px;font-weight:600;flex:0;border:2px solid rgba(0, 212, 255, 0.2);}
+    .wallet-row button:hover {background:linear-gradient(135deg, rgba(0, 212, 255, 0.25) 0%, rgba(0, 212, 255, 0.1) 100%);border-color:var(--accent);}
+    .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0, 0, 0, 0.85);backdrop-filter: blur(5px);display:none;align-items:center;justify-content:center;z-index:1000;padding:12px;animation: fadeIn 0.3s ease;}
+    .modal.show{display:flex;}
+    .modal-content{background:var(--panel);padding:28px;border-radius:16px;color:var(--white);width:100%;max-width:480px;max-height:90vh;overflow:auto;border:2px solid rgba(0, 212, 255, 0.2);box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);animation: slideIn 0.3s ease;}
+    .modal h3{margin-top:0;margin-bottom:20px;color:var(--accent);font-size: 20px;letter-spacing: 0.5px;}
+    .modal input{width:100%;margin-bottom:12px;padding:12px 16px;border-radius:10px;border:2px solid rgba(0, 212, 255, 0.2);background:var(--bg-secondary);color:var(--white);transition: all 0.3s ease;}
+    .modal input:focus {border-color:var(--accent);outline: none;box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);}
+    .modal-actions{display:flex;gap:10px;margin-top:20px;}
+    .modal-actions button{flex:1;}
+    .modal-message{margin:12px 0;padding:14px;border-radius:8px;font-size:13px;display:none;font-weight: 600;border-left: 4px solid transparent;}
+    .modal-message.error{background:rgba(255, 51, 102, 0.15);color:var(--danger);display:block;border-left-color:var(--danger);}
+    .modal-message.success{background:rgba(0, 217, 129, 0.15);color:var(--success);display:block;border-left-color:var(--success);}
+    .hidden{display:none !important;}
+    main{padding-bottom:120px;background:var(--bg);}
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+    ::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.3);border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(0, 212, 255, 0.5); }
+    @media (max-width:768px){ header h1{font-size:20px;} .game-box{min-height:300px;padding:16px;} .game-content{flex-direction:column;gap:20px;} #multiplier{font-size:48px;} #plane{width:100px;height:50px;} .controls{padding:12px;gap:10px;} input[type=number]{font-size:16px;} button {padding: 14px 16px;font-size: 13px;} .row{flex-direction:column;} .row input, .row button{width:100%;} .modal-content{max-width:90%;padding:20px;} }
+    @media (max-width:480px){ header{padding:12px 16px;} header h1{font-size:18px;} #multiplier{font-size:40px;} .game-box{margin:8px;} .controls{margin:8px;} button {padding: 12px 14px;font-size: 12px;} }
+    button:focus,input:focus{outline:none;}
   </style>
 </head>
 <body>
@@ -506,7 +84,7 @@
     <div class="header-right">
       <button id="loginBtn" onclick="showLogin()" class="btn-secondary">Login</button>
       <button id="registerBtn" onclick="showRegister()" class="btn-secondary">Register</button>
-	  <button id="adminBtn" onclick="openAdminDashboard()" class="btn-secondary hidden" title="Admin Dashboard">⚙️</button>
+      <button id="adminBtn" onclick="openAdminDashboard()" class="btn-secondary hidden" title="Admin Dashboard">⚙️</button>
       <button id="logoutBtn" onclick="logout()" class="btn-secondary hidden">Logout</button>
     </div>
   </header>
@@ -537,20 +115,17 @@
         <input id="betAmount" type="number" min="1" step="1" value="5" placeholder="Bet amount (K)" />
         <button class="primary" id="playBtn" onclick="startGame()">Play</button>
       </div>
-
       <div class="row">
-		<button class="danger" id="cashOutBtn" disabled onclick="cashOut()">Cash Out</button>
-		<button class="btn-secondary" id="viewProofBtn" disabled onclick="viewProof()">View Proof</button>
-	</div>
-
-	<div class="wallet-row">
-		<button class="btn-secondary" onclick="deposit()">+ Deposit</button>
-		<button class="btn-secondary" onclick="withdraw()">- Withdraw</button>
-	</div>
+        <button class="danger" id="cashOutBtn" disabled onclick="cashOut()">Cash Out</button>
+        <button class="btn-secondary" id="viewProofBtn" disabled onclick="viewProof()">View Proof</button>
+      </div>
+      <div class="wallet-row">
+        <button class="btn-secondary" onclick="deposit()">+ Deposit</button>
+        <button class="btn-secondary" onclick="withdraw()">- Withdraw</button>
+      </div>
     </section>
   </main>
 
-  <!-- Login Modal -->
   <div class="modal" id="loginModal">
     <div class="modal-content">
       <h3>Login</h3>
@@ -564,7 +139,6 @@
     </div>
   </div>
 
-  <!-- Register Modal -->
   <div class="modal" id="registerModal">
     <div class="modal-content">
       <h3>Register</h3>
@@ -583,31 +157,22 @@
     </div>
   </div>
   
-  <!-- Proof Modal -->
   <div class="modal" id="proofModal">
     <div class="modal-content">
       <h3>🎯 Round Proof – Verify Fairness</h3>
-      
       <div style="background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;">
         <p style="font-size:12px;color:var(--muted);margin:0 0 10px 0;">Server Seed:</p>
         <code style="word-break:break-all;color:var(--accent);font-size:11px;" id="proofSeed">Loading...</code>
       </div>
-
       <div style="background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;">
         <p style="font-size:12px;color:var(--muted);margin:0 0 10px 0;">Seed Hash:</p>
         <code style="word-break:break-all;color:var(--accent);font-size:11px;" id="proofHash">Loading...</code>
       </div>
-
       <div style="background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;">
         <p style="font-size:12px;color:var(--muted);margin:0 0 10px 0;">Crash Point:</p>
         <code style="color:var(--accent);font-size:14px;font-weight:bold;" id="proofCrash">Loading...</code>
       </div>
-
-      <p style="font-size:12px;color:var(--muted);text-align:center;">
-        ✅ This crash was determined by the seed above.<br>
-        You can verify using SHA256(seed) = hash shown.
-      </p>
-
+      <p style="font-size:12px;color:var(--muted);text-align:center;">✅ This crash was determined by the seed above.<br>You can verify using SHA256(seed) = hash shown.</p>
       <div class="modal-actions">
         <button class="primary" onclick="copyProof()">Copy Proof</button>
         <button class="btn-secondary" onclick="hideModals()">Close</button>
@@ -615,62 +180,39 @@
     </div>
   </div>
   
-    <!-- Terms & Conditions Modal -->
   <div class="modal" id="tcModal">
     <div class="modal-content">
       <h3>📋 Terms & Conditions</h3>
-      
       <div style="max-height:300px;overflow-y:auto;background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;font-size:12px;line-height:1.6;">
         <h4 style="color:var(--accent);margin-top:0;">FlyZed – Terms & Conditions</h4>
-        
         <p><strong>1. ACCEPTANCE OF TERMS</strong></p>
         <p>By using FlyZed, you agree to these Terms & Conditions. If you do not agree, please do not use our service.</p>
-        
         <p><strong>2. AGE REQUIREMENT</strong></p>
         <p>You must be at least 18 years old to use this service. By accepting these terms, you confirm you are 18 or older.</p>
-        
         <p><strong>3. NO REAL MONEY (DEMO MODE)</strong></p>
         <p>This is currently a DEMO version. No real money is involved. All balances are virtual and for testing purposes only.</p>
-        
         <p><strong>4. RESPONSIBLE GAMBLING</strong></p>
         <p>FlyZed promotes responsible gambling. Please gamble responsibly and within your means:</p>
-        <ul style="margin:10px 0;padding-left:20px;">
-          <li>Set limits on how much you spend</li>
-          <li>Never gamble money you cannot afford to lose</li>
-          <li>Take regular breaks</li>
-          <li>Seek help if you have gambling problems</li>
-        </ul>
-        
+        <ul style="margin:10px 0;padding-left:20px;"><li>Set limits on how much you spend</li><li>Never gamble money you cannot afford to lose</li><li>Take regular breaks</li><li>Seek help if you have gambling problems</li></ul>
         <p><strong>5. FAIR PLAY</strong></p>
         <p>All crash points are generated fairly using cryptographic seeds. You can verify fairness by viewing the proof after each round.</p>
-        
         <p><strong>6. ACCOUNT RESPONSIBILITY</strong></p>
         <p>You are responsible for keeping your account credentials secret. FlyZed is not liable for unauthorized access.</p>
-        
         <p><strong>7. LIMITATION OF LIABILITY</strong></p>
         <p>FlyZed is provided "as is" without warranties. We are not liable for losses incurred through gameplay.</p>
-        
         <p><strong>8. CHANGES TO TERMS</strong></p>
         <p>FlyZed may update these terms at any time. Continued use constitutes acceptance.</p>
-        
-        <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:20px;">
-          Last Updated: 2026-02-12<br>
-          © 2026 FlyZed. All rights reserved.
-        </p>
+        <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:20px;">Last Updated: 2026-02-12<br>© 2026 FlyZed. All rights reserved.</p>
       </div>
-
       <label style="display:flex;gap:8px;align-items:flex-start;margin:15px 0;color:var(--muted);font-size:13px;">
         <input type="checkbox" id="tcAgree" style="margin-top:3px;cursor:pointer;flex-shrink:0;">
         <span>I have read and accept the Terms & Conditions</span>
       </label>
-
       <label style="display:flex;gap:8px;align-items:flex-start;margin:15px 0;color:var(--muted);font-size:13px;">
         <input type="checkbox" id="ageConfirm" style="margin-top:3px;cursor:pointer;flex-shrink:0;">
         <span>I confirm I am 18 years old or older</span>
       </label>
-
       <div id="tcMessage" class="modal-message"></div>
-
       <div class="modal-actions">
         <button class="primary" onclick="acceptTC()">Accept & Continue</button>
         <button class="btn-secondary" onclick="rejectTC()">Decline</button>
@@ -678,23 +220,15 @@
     </div>
   </div>
 
-  <!-- Responsible Gaming Warning Modal -->
   <div class="modal" id="gamingWarningModal">
     <div class="modal-content">
       <h3>⚠️ Responsible Gaming</h3>
-      
       <div style="background:#d7263d;padding:15px;border-radius:8px;margin:15px 0;color:white;font-size:14px;line-height:1.6;">
         <p style="margin-top:0;"><strong>🎮 Gaming Reminder</strong></p>
         <p>You've been playing for a while. Remember to:</p>
-        <ul style="margin:10px 0;padding-left:20px;">
-          <li>Take a break</li>
-          <li>Only gamble what you can afford to lose</li>
-          <li>Never chase losses</li>
-          <li>Set time and money limits</li>
-        </ul>
+        <ul style="margin:10px 0;padding-left:20px;"><li>Take a break</li><li>Only gamble what you can afford to lose</li><li>Never chase losses</li><li>Set time and money limits</li></ul>
         <p style="margin-bottom:0;font-size:12px;opacity:0.9;">If you have gambling concerns, please seek help.</p>
       </div>
-
       <div class="modal-actions">
         <button class="primary" onclick="hideModals()">I Understand</button>
         <button class="btn-secondary" onclick="selfExclude()">Self-Exclude</button>
@@ -702,18 +236,15 @@
     </div>
   </div>
   
-    <!-- Admin Dashboard Modal -->
   <div class="modal" id="adminModal">
     <div class="modal-content" style="max-width:600px;">
       <h3>⚙️ Admin Dashboard</h3>
-      
       <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
         <p style="margin:0 0 12px 0;"><strong>📊 System Status</strong></p>
         <p style="margin:8px 0;"><span style="color:var(--muted);">Active Rounds:</span> <span id="adminActiveRounds">-</span></p>
         <p style="margin:8px 0;"><span style="color:var(--muted);">Total Users:</span> <span id="adminUserCount">-</span></p>
         <p style="margin:8px 0;"><span style="color:var(--muted);">RTP (24h):</span> <span id="adminRTP">-</span>%</p>
       </div>
-
       <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
         <p style="margin:0 0 12px 0;"><strong>🎮 Game Controls</strong></p>
         <div class="row">
@@ -721,7 +252,6 @@
           <button class="btn-secondary" onclick="adminResumeGames()" style="flex:1;">▶ Resume Games</button>
         </div>
       </div>
-
       <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
         <p style="margin:0 0 12px 0;"><strong>💳 Payment Controls</strong></p>
         <div class="row">
@@ -729,9 +259,7 @@
           <button class="btn-secondary" onclick="adminResumePayments()" style="flex:1;">▶ Resume Payments</button>
         </div>
       </div>
-
       <div id="adminMessage" class="modal-message"></div>
-
       <div class="modal-actions">
         <button class="primary" onclick="refreshAdminDashboard()">🔄 Refresh</button>
         <button class="btn-secondary" onclick="hideModals()">Close</button>
@@ -739,13 +267,10 @@
     </div>
   </div>
   
-  <!-- Socket.IO for real-time multiplier updates -->
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-  
   <script>
     const API_BASE = 'https://ka-ndeke-backend-5dgy.onrender.com/api';
     const TOKEN_KEY = 'flyzed_token';
-
     let authMode = null;
     let currentUser = null;
     let guestBalance = 10;
@@ -755,15 +280,16 @@
     let crashed = false;
     let roundActive = false;
     let statusPoller = null;
-	let currentRoundId = null;  // Track current round ID for proof viewing
-	let tcAccepted = false;  // Track if user accepted T&C
-	let gamingWarningShown = false;  // Track if warning shown this session
-	let warningTimer = null;  // Timer for 30-min warning
-	let socket = null;  // Socket.IO connection
-	let useWebSocket = true;  // Toggle between WebSocket and HTTP polling
-	let lastKnownCrashPoint = null;  // Track if we know round crashed
-	let lastCrashTime = null;  // Track when crash happened
-	let localCrashDetected = false;  // Did we detect crash locally?
+    let currentRoundId = null;
+    let tcAccepted = false;
+    let gamingWarningShown = false;
+    let warningTimer = null;
+    let socket = null;
+    let useWebSocket = true;
+    let lastKnownCrashPoint = null;
+    let lastCrashTime = null;
+    let localCrashDetected = false;
+    let adminToken = null;
 
     const loginModal = document.getElementById('loginModal');
     const registerModal = document.getElementById('registerModal');
@@ -771,17 +297,21 @@
     const registerBtn = document.getElementById('registerBtn');
     const logoutBtn = document.getElementById('logoutBtn');
 
-    // ✅ FIXED apiFetch function
+    function generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
     async function apiFetch(path, opts = {}, withAuth = true) {
       const url = API_BASE + path;
       const headers = opts.headers || {};
-
       if (withAuth) {
         const token = localStorage.getItem(TOKEN_KEY);
         if (token) headers['Authorization'] = 'Bearer ' + token;
       }
-
-      // ✅ FIX: Create a new object for body, don't reuse opts.body
       let body = null;
       if (opts.body) {
         if (typeof opts.body === 'object') {
@@ -791,27 +321,12 @@
           body = opts.body;
         }
       }
-
       try {
-        const res = await fetch(url, { 
-          method: opts.method || 'GET',
-          headers: headers,
-          body: body
-        });
-        
+        const res = await fetch(url, { method: opts.method || 'GET', headers: headers, body: body });
         const text = await res.text();
         let json = null;
-
-        try {
-          json = text ? JSON.parse(text) : null;
-        } catch (e) {
-          json = null;
-        }
-
-        if (!res.ok) {
-          throw new Error(json?.error || `HTTP ${res.status}`);
-        }
-
+        try { json = text ? JSON.parse(text) : null; } catch (e) { json = null; }
+        if (!res.ok) { throw new Error(json?.error || `HTTP ${res.status}`); }
         return json;
       } catch (err) {
         console.error(`[API] ${path}:`, err.message);
@@ -822,14 +337,12 @@
     function updateUI() {
       const name = authMode ? (currentUser?.username || 'User') : 'Guest';
       const balance = authMode ? (currentUser?.balance || 0) : guestBalance;
-
       document.getElementById('username').textContent = name;
       document.getElementById('balance').textContent = 'K ' + Number(balance).toFixed(2);
-
       loginBtn.classList.toggle('hidden', !!authMode);
       registerBtn.classList.toggle('hidden', !!authMode);
       logoutBtn.classList.toggle('hidden', !authMode);
-	  document.getElementById('adminBtn').classList.toggle('hidden', !authMode);  // Show admin btn when logged in
+      document.getElementById('adminBtn').classList.toggle('hidden', !authMode);
     }
 
     function showLogin() {
@@ -853,9 +366,10 @@
     function hideModals() {
       loginModal.classList.remove('show');
       registerModal.classList.remove('show');
-	  document.getElementById('proofModal').classList.remove('show');
-	  document.getElementById('tcModal').classList.remove('show');
-	  document.getElementById('gamingWarningModal').classList.remove('show');
+      document.getElementById('proofModal').classList.remove('show');
+      document.getElementById('tcModal').classList.remove('show');
+      document.getElementById('gamingWarningModal').classList.remove('show');
+      document.getElementById('adminModal').classList.remove('show');
     }
 
     function showMessage(modalId, message, isError) {
@@ -865,434 +379,263 @@
     }
 
     async function pollRoundStatus() {
-  // Skip if WebSocket is handling updates
-  if (useWebSocket && socket && socket.connected) {
-    return;
-  }
-
-  try {
-    const status = await apiFetch('/game/status', { method: 'GET' }, false);
-    
-    if (!status) return;
-
-    let liveMultiplier = 1.0;
-    if (status.startedAt && status.status === 'running') {
-      const startedMs = Number(status.startedAt);
-      const elapsedMs = Date.now() - startedMs;
-      const elapsedSec = elapsedMs / 1000;
-      liveMultiplier = 1 + (elapsedSec * 0.5);
-    } else if (status.multiplier) {
-      liveMultiplier = Number(status.multiplier);
+      if (useWebSocket && socket && socket.connected) { return; }
+      try {
+        const status = await apiFetch('/game/status', { method: 'GET' }, false);
+        if (!status) return;
+        let liveMultiplier = 1.0;
+        if (status.startedAt && status.status === 'running') {
+          const startedMs = Number(status.startedAt);
+          const elapsedMs = Date.now() - startedMs;
+          const elapsedSec = elapsedMs / 1000;
+          liveMultiplier = 1 + (elapsedSec * 0.5);
+        } else if (status.multiplier) {
+          liveMultiplier = Number(status.multiplier);
+        }
+        document.getElementById('multiplier').textContent = liveMultiplier.toFixed(2) + 'x';
+        const planeEl = document.getElementById('plane');
+        const translateX = Math.min(300, liveMultiplier * 30);
+        const translateY = liveMultiplier * -20;
+        planeEl.style.transform = `translateX(${translateX}px) translateY(${translateY}px) rotate(${liveMultiplier * 5}deg)`;
+        if (status.status === 'running' && !roundActive) {
+          roundActive = true;
+          localCrashDetected = false;
+          lastKnownCrashPoint = null;
+          document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
+        }
+        if (status.status === 'crashed' && roundActive) {
+          if (!localCrashDetected) {
+            localCrashDetected = true;
+            lastCrashTime = Date.now();
+            lastKnownCrashPoint = status.multiplier || liveMultiplier;
+            console.log('🛑 CRASH DETECTED - Disabling cashOut:', { crashPoint: lastKnownCrashPoint, detectedAt: new Date(lastCrashTime).toLocaleTimeString() });
+          }
+          roundActive = false;
+          crashed = true;
+          running = false;
+          document.getElementById('status').textContent = `💥 Crashed at ${liveMultiplier.toFixed(2)}x`;
+          document.getElementById('cashOutBtn').disabled = true;
+          document.getElementById('playBtn').disabled = false;
+          document.getElementById('viewProofBtn').disabled = false;
+        }
+      } catch (err) {}
     }
-
-    // Update display
-    document.getElementById('multiplier').textContent = liveMultiplier.toFixed(2) + 'x';
-    
-    const planeEl = document.getElementById('plane');
-    const translateX = Math.min(300, liveMultiplier * 30);
-    const translateY = liveMultiplier * -20;
-    planeEl.style.transform = `translateX(${translateX}px) translateY(${translateY}px) rotate(${liveMultiplier * 5}deg)`;
-
-    if (status.status === 'running' && !roundActive) {
-      roundActive = true;
-      localCrashDetected = false;  // Reset crash detection
-      lastKnownCrashPoint = null;
-      document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
-    }
-
-    if (status.status === 'crashed' && roundActive) {
-      // ✅ STAGE 3: Detect crash and prevent cashOut race condition
-      if (!localCrashDetected) {
-        localCrashDetected = true;
-        lastCrashTime = Date.now();
-        lastKnownCrashPoint = status.multiplier || liveMultiplier;
-        
-        console.log('🛑 CRASH DETECTED - Disabling cashOut:', {
-          crashPoint: lastKnownCrashPoint,
-          detectedAt: new Date(lastCrashTime).toLocaleTimeString()
-        });
-      }
-
-      roundActive = false;
-      crashed = true;
-      running = false;
-      
-      document.getElementById('status').textContent = `💥 Crashed at ${liveMultiplier.toFixed(2)}x`;
-      document.getElementById('cashOutBtn').disabled = true;  // ✅ PREVENT CASHOUT
-      document.getElementById('playBtn').disabled = false;
-      document.getElementById('viewProofBtn').disabled = false;
-    }
-  } catch (err) {
-    // Silently fail
-  }
-}
 
     statusPoller = setInterval(pollRoundStatus, 50);
 
- async function register() {
-  const username = document.getElementById('regName').value;
-  const phone = document.getElementById('regPhone').value;
-  const password = document.getElementById('regPassword').value;
-  const agreed = document.getElementById('agreeTerms').checked;
-
-  console.log('Sending register:', { username, phone, password, agreed });
-
-  try {
-    const data = await apiFetch('/auth/register', {
-      method: 'POST',
-      body: { username, phone, password }
-    }, false);
-
-    localStorage.setItem(TOKEN_KEY, data.token);
-    currentUser = data.user;
-    authMode = 'server';
-    updateUI();
-    
-    // Close register modal and show T&C modal
-    document.getElementById('registerModal').classList.remove('show');
-    showTC();
-    
-  } catch (err) {
-    console.error('Register error:', err);
-    showMessage('registerMessage', err.message || 'Registration failed', true);
-  }
-}
+    async function register() {
+      const username = document.getElementById('regName').value;
+      const phone = document.getElementById('regPhone').value;
+      const password = document.getElementById('regPassword').value;
+      try {
+        const data = await apiFetch('/auth/register', { method: 'POST', body: { username, phone, password } }, false);
+        localStorage.setItem(TOKEN_KEY, data.token);
+        currentUser = data.user;
+        authMode = 'server';
+        updateUI();
+        document.getElementById('registerModal').classList.remove('show');
+        showTC();
+      } catch (err) {
+        console.error('Register error:', err);
+        showMessage('registerMessage', err.message || 'Registration failed', true);
+      }
+    }
 
     async function login() {
-  const phone = document.getElementById('loginPhone').value;
-  const password = document.getElementById('loginPassword').value;
-
-  console.log('Sending login:', { phone, password });
-
-  try {
-    const data = await apiFetch('/auth/login', {
-      method: 'POST',
-      body: { phone, password }
-    }, false);
-
-    localStorage.setItem(TOKEN_KEY, data.token);
-    currentUser = data.user;
-    authMode = 'server';
-    updateUI();
-
-    showMessage('loginMessage', 'Login successful!', false);
-    
-    setTimeout(() => {
-      hideModals();
-      // Check if need to accept T&C
-      apiFetch('/legal/compliance-status', {}, true)
-        .then(res => {
-          if (!res.status.compliant) {
-            showTC();
-          } else {
-            tcAccepted = true;
-          }
-        })
-        .catch(() => {
-          tcAccepted = true;
-        });
-    }, 1000);
-    
-  } catch (err) {
-    console.error('Login error:', err);
-    showMessage('loginMessage', err.message || 'Login failed', true);
-  }
-}
+      const phone = document.getElementById('loginPhone').value;
+      const password = document.getElementById('loginPassword').value;
+      try {
+        const data = await apiFetch('/auth/login', { method: 'POST', body: { phone, password } }, false);
+        localStorage.setItem(TOKEN_KEY, data.token);
+        currentUser = data.user;
+        authMode = 'server';
+        updateUI();
+        showMessage('loginMessage', 'Login successful!', false);
+        setTimeout(() => {
+          hideModals();
+          apiFetch('/legal/compliance-status', {}, true)
+            .then(res => { if (!res.status.compliant) showTC(); else tcAccepted = true; })
+            .catch(() => { tcAccepted = true; });
+        }, 1000);
+      } catch (err) {
+        console.error('Login error:', err);
+        showMessage('loginMessage', err.message || 'Login failed', true);
+      }
+    }
 
     function logout() {
       localStorage.removeItem(TOKEN_KEY);
       currentUser = null;
       authMode = null;
       guestBalance = 10;
-	  adminToken = null;  // Clear admin token
-	  document.getElementById('adminBtn').classList.add('hidden');  // Hide admin button
+      adminToken = null;
+      document.getElementById('adminBtn').classList.add('hidden');
       updateUI();
     }
 
     async function startGame() {
-	console.log('🎮 StartGame called:', {
-    authMode,
-    tcAccepted,
-    running,
-    crashed,
-    balance: authMode ? currentUser?.balance : guestBalance
-  });
-
-	// Ensure WebSocket is connected
-  if (useWebSocket && (!socket || !socket.connected)) {
-    console.warn('⚠️ WebSocket not connected, using polling fallback');
-    useWebSocket = false;
-    startHttpPolling();
-  }
-
-	// CHECK: Has user accepted T&C?
-	  if (authMode === 'server' && !tcAccepted) {
-		try {
-		const compliance = await apiFetch('/legal/compliance-status', {}, true);
-      if (!compliance.status.compliant) {
-        alert('⚠️ You must accept Terms & Conditions before playing');
-        showTC();
-        return;
+      if (useWebSocket && (!socket || !socket.connected)) {
+        useWebSocket = false;
+        startHttpPolling();
       }
-      tcAccepted = true;
-    } catch (err) {
-      console.warn('Could not check compliance:', err);
-    }
-  }
-
-  // Show gaming warning after 30 minutes
-  if (warningTimer) clearTimeout(warningTimer);
-  warningTimer = setTimeout(() => {
-    showGamingWarning();
-  }, 30 * 60 * 1000); // 30 minutes
-  
+      if (authMode === 'server' && !tcAccepted) {
+        try {
+          const compliance = await apiFetch('/legal/compliance-status', {}, true);
+          if (!compliance.status.compliant) {
+            alert('⚠️ You must accept Terms & Conditions before playing');
+            showTC();
+            return;
+          }
+          tcAccepted = true;
+        } catch (err) {
+          console.warn('Could not check compliance:', err);
+        }
+      }
+      if (warningTimer) clearTimeout(warningTimer);
+      warningTimer = setTimeout(() => { showGamingWarning(); }, 30 * 60 * 1000);
       if (running) return alert('Round already in progress');
-
       const bet = Number(document.getElementById('betAmount').value);
       if (bet <= 0) return alert('Invalid bet amount');
-
       if (authMode === 'server') {
-        if (!currentUser || bet > currentUser.balance) {
-          return alert('Insufficient balance');
-        }
+        if (!currentUser || bet > currentUser.balance) { return alert('Insufficient balance'); }
       } else {
-        if (bet > guestBalance) {
-          return alert('Insufficient balance (guest)');
-        }
+        if (bet > guestBalance) { return alert('Insufficient balance (guest)'); }
       }
-
       try {
-        const data = await apiFetch('/game/start', {
-          method: 'POST',
-          body: { betAmount: bet }
-        }, true);
-
+        const data = await apiFetch('/game/start', { method: 'POST', body: { betAmount: bet } }, true);
         currentBet = bet;
         multiplier = 1.0;
         running = true;
         crashed = false;
-        localCrashDetected = false;  // ✅ Reset crash state for new round
+        localCrashDetected = false;
         lastKnownCrashPoint = null;
-        crashed = false;
-
         if (authMode === 'server') {
           currentUser.balance = Number(data.balance) || 0;
         } else {
           guestBalance -= bet;
         }
-
         updateUI();
         document.getElementById('cashOutBtn').disabled = false;
         document.getElementById('playBtn').disabled = true;
         document.getElementById('status').textContent = '✈️ Bet placed!';
         document.getElementById('multiplier').textContent = '1.00x';
-		currentRoundId = data.roundId;  // Save round ID for later proof viewing
-		document.getElementById('viewProofBtn').disabled = true;  // Disable until crash
-
+        currentRoundId = data.roundId;
+        document.getElementById('viewProofBtn').disabled = true;
       } catch (err) {
         alert('Failed to start round: ' + err.message);
       }
     }
 
     async function cashOut() {
-  // ✅ STAGE 3: Double-check crash status before sending request
-  
-  if (crashed) {
-    console.warn('❌ CashOut: Round already crashed locally');
-    return alert('Too late! Round already crashed.');
-  }
-  
-  if (!running) {
-    console.warn('❌ CashOut: Game not running');
-    return alert('No active game');
-  }
-
-  // ✅ CRITICAL: Verify crash status with backend RIGHT NOW
-  try {
-    const status = await apiFetch('/game/status', { method: 'GET' }, false);
-    
-    if (status.status !== 'running') {
-      // ✅ PREVENT RACE CONDITION: Backend says round crashed!
-      crashed = true;
-      running = false;
-      localCrashDetected = true;
-      lastKnownCrashPoint = status.multiplier;
-      
-      console.error('❌ CashOut: Backend detected crash - preventing exploit');
-      console.log('💥 Round crashed at:', lastKnownCrashPoint);
-      
-      document.getElementById('cashOutBtn').disabled = true;
-      document.getElementById('status').textContent = `💥 Crashed at ${Number(lastKnownCrashPoint).toFixed(2)}x`;
-      
-      return alert(`Too late! Round crashed at ${Number(lastKnownCrashPoint).toFixed(2)}x`);
-    }
-  } catch (err) {
-    console.warn('⚠️ Could not verify crash status, proceeding with caution');
-  }
-
-  // ✅ If we get here, round is definitely still running
-  try {
-    const data = await apiFetch('/game/cashout', {
-      method: 'POST',
-      body: {}
-    }, true);
-
-    running = false;
-    crashed = true;
-    document.getElementById('cashOutBtn').disabled = true;
-    document.getElementById('playBtn').disabled = false;
-
-    if (data.success) {
-      const payout = Number(data.payout);
-      if (authMode === 'server') {
-        currentUser.balance = Number(data.balance) || 0;
-      } else {
-        guestBalance += payout;
+      if (crashed) { return alert('Too late! Round already crashed.'); }
+      if (!running) { return alert('No active game'); }
+      try {
+        const status = await apiFetch('/game/status', { method: 'GET' }, false);
+        if (status.status !== 'running') {
+          crashed = true;
+          running = false;
+          localCrashDetected = true;
+          lastKnownCrashPoint = status.multiplier;
+          document.getElementById('cashOutBtn').disabled = true;
+          document.getElementById('status').textContent = `💥 Crashed at ${Number(lastKnownCrashPoint).toFixed(2)}x`;
+          return alert(`Too late! Round crashed at ${Number(lastKnownCrashPoint).toFixed(2)}x`);
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not verify crash status, proceeding with caution');
       }
-      updateUI();
-      document.getElementById('status').textContent = `✅ Won K ${payout.toFixed(2)}!`;
-      
-      console.log('✅ CashOut successful:', { payout, multiplier: data.multiplier });
-    } else {
-      document.getElementById('status').textContent = `💥 Lost!`;
-      console.log('❌ CashOut: Lost round');
-    }
-  } catch (err) {
-    alert('Cash out failed: ' + err.message);
-    console.error('CashOut error:', err);
-  }
-}
-
-        <!-- Keep your existing HTML, just update the JavaScript functions -->
-
-<!-- ============ DEPOSIT ============ -->
-<script>
-async function deposit() {
-  // ✅ GENERATE NEW UUID FOR THIS TRANSACTION
-  const transactionUUID = generateUUID();
-  
-  const amountStr = prompt('Enter deposit amount (K):\n\n(Min: K0.50 | Max: K500,000)');
-  if (!amountStr) return;
-  
-  const amount = Number(amountStr);
-  
-  if (isNaN(amount) || amount <= 0) {
-    alert('❌ Please enter a valid amount');
-    return;
-  }
-
-  if (!authMode) {
-    guestBalance += amount;
-    updateUI();
-    alert('✅ Deposit applied (guest mode)\n\nNew balance: K ' + guestBalance.toFixed(2));
-    return;
-  }
-
-  try {
-    console.log('📤 Sending deposit request:', { 
-      amount, 
-      transactionUUID,  // ← NEW: Log the UUID
-      timestamp: new Date().toISOString()
-    });
-    
-    // ✅ SEND UUID TO BACKEND
-    const responseData = await apiFetch('/payments/deposit', {
-      method: 'POST',
-      body: { 
-        amount: amount,
-        transactionUUID: transactionUUID  // ← NEW: Include UUID
+      try {
+        const data = await apiFetch('/game/cashout', { method: 'POST', body: {} }, true);
+        running = false;
+        crashed = true;
+        document.getElementById('cashOutBtn').disabled = true;
+        document.getElementById('playBtn').disabled = false;
+        if (data.success) {
+          const payout = Number(data.payout);
+          if (authMode === 'server') {
+            currentUser.balance = Number(data.balance) || 0;
+          } else {
+            guestBalance += payout;
+          }
+          updateUI();
+          document.getElementById('status').textContent = `✅ Won K ${payout.toFixed(2)}!`;
+        } else {
+          document.getElementById('status').textContent = `💥 Lost!`;
+        }
+      } catch (err) {
+        alert('Cash out failed: ' + err.message);
+        console.error('CashOut error:', err);
       }
-    }, true);
-
-    console.log('📥 Deposit response:', responseData);
-
-    if (responseData && responseData.ok) {
-      alert(`✅ Deposit initiated!\n\nTransaction ID:\n${responseData.transactionId}\n\nPlease confirm on your phone.`);
-      
-      console.log('Deposit initiated successfully');
-    } else {
-      alert('❌ ' + (responseData?.message || 'Deposit failed'));
     }
-  } catch (err) {
-    console.error('❌ Deposit error:', err);
-    alert('❌ ' + err.message);
-  }
-}
 
-// ============ WITHDRAW ============
-async function withdraw() {
-  // ✅ GENERATE NEW UUID FOR THIS TRANSACTION
-  const transactionUUID = generateUUID();
-  
-  const amountStr = prompt('Enter withdrawal amount (K):\n\n(Min: K5 | Max: K5,000)');
-  if (!amountStr) return;
-  
-  const amount = Number(amountStr);
-  
-  if (isNaN(amount) || amount <= 0) {
-    alert('❌ Please enter a valid amount');
-    return;
-  }
-
-  if (!authMode) {
-    if (amount > guestBalance) {
-      alert('❌ Insufficient balance\n\nYour balance: K ' + guestBalance.toFixed(2));
-      return;
-    }
-    guestBalance -= amount;
-    updateUI();
-    alert('✅ Withdrawal applied (guest mode)\n\nNew balance: K ' + guestBalance.toFixed(2));
-    return;
-  }
-
-  try {
-    console.log('📤 Sending withdraw request:', { 
-      amount,
-      transactionUUID,  // ← NEW: Log the UUID
-      timestamp: new Date().toISOString()
-    });
-    
-    // ✅ SEND UUID TO BACKEND
-    const responseData = await apiFetch('/payments/withdraw', {
-      method: 'POST',
-      body: { 
-        amount: amount,
-        transactionUUID: transactionUUID  // ← NEW: Include UUID
+    async function deposit() {
+      const transactionUUID = generateUUID();
+      const amountStr = prompt('Enter deposit amount (K):\n\n(Min: K0.50 | Max: K500,000)');
+      if (!amountStr) return;
+      const amount = Number(amountStr);
+      if (isNaN(amount) || amount <= 0) {
+        alert('❌ Please enter a valid amount');
+        return;
       }
-    }, true);
-
-    console.log('📥 Withdraw response:', responseData);
-
-    if (responseData && responseData.ok) {
-      currentUser.balance = responseData.newBalance;
-      updateUI();
-      
-      alert(`✅ Withdrawal initiated!\n\nTransaction ID:\n${responseData.transactionId}\n\nMoney arriving shortly...\n\nNew balance: K ${responseData.newBalance.toFixed(2)}`);
-    } else {
-      alert('❌ ' + (responseData?.message || 'Withdrawal failed'));
+      if (!authMode) {
+        guestBalance += amount;
+        updateUI();
+        alert('✅ Deposit applied (guest mode)\n\nNew balance: K ' + guestBalance.toFixed(2));
+        return;
+      }
+      try {
+        console.log('📤 Sending deposit request:', { amount, transactionUUID, timestamp: new Date().toISOString() });
+        const responseData = await apiFetch('/payments/deposit', { method: 'POST', body: { amount: amount, transactionUUID: transactionUUID } }, true);
+        console.log('📥 Deposit response:', responseData);
+        if (responseData && responseData.ok) {
+          alert(`✅ Deposit initiated!\n\nTransaction ID:\n${responseData.transactionId}\n\nPlease confirm on your phone.`);
+        } else {
+          alert('❌ ' + (responseData?.message || 'Deposit failed'));
+        }
+      } catch (err) {
+        console.error('❌ Deposit error:', err);
+        alert('❌ ' + err.message);
+      }
     }
-  } catch (err) {
-    console.error('❌ Withdraw error:', err);
-    alert('❌ ' + err.message);
-  }
-}
 
-// ✅ NEW: UUID GENERATOR FUNCTION
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
-</script>
-	  
+    async function withdraw() {
+      const transactionUUID = generateUUID();
+      const amountStr = prompt('Enter withdrawal amount (K):\n\n(Min: K5 | Max: K5,000)');
+      if (!amountStr) return;
+      const amount = Number(amountStr);
+      if (isNaN(amount) || amount <= 0) {
+        alert('❌ Please enter a valid amount');
+        return;
+      }
+      if (!authMode) {
+        if (amount > guestBalance) {
+          alert('❌ Insufficient balance\n\nYour balance: K ' + guestBalance.toFixed(2));
+          return;
+        }
+        guestBalance -= amount;
+        updateUI();
+        alert('✅ Withdrawal applied (guest mode)\n\nNew balance: K ' + guestBalance.toFixed(2));
+        return;
+      }
+      try {
+        console.log('📤 Sending withdraw request:', { amount, transactionUUID, timestamp: new Date().toISOString() });
+        const responseData = await apiFetch('/payments/withdraw', { method: 'POST', body: { amount: amount, transactionUUID: transactionUUID } }, true);
+        console.log('📥 Withdraw response:', responseData);
+        if (responseData && responseData.ok) {
+          currentUser.balance = responseData.newBalance;
+          updateUI();
+          alert(`✅ Withdrawal initiated!\n\nTransaction ID:\n${responseData.transactionId}\n\nMoney arriving shortly...\n\nNew balance: K ${responseData.newBalance.toFixed(2)}`);
+        } else {
+          alert('❌ ' + (responseData?.message || 'Withdrawal failed'));
+        }
+      } catch (err) {
+        console.error('❌ Withdraw error:', err);
+        alert('❌ ' + err.message);
+      }
+    }
+
     updateUI();
-
     [loginModal, registerModal].forEach(modal => {
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) hideModals();
-      });
+      modal.addEventListener('click', (e) => { if (e.target === modal) hideModals(); });
     });
 
     (async () => {
@@ -1309,424 +652,298 @@ function generateUUID() {
         }
       }
     })();
-	
-// ============ STAGE 3: SYNC VERIFICATION ============
 
-// Verify sync on startup
-window.addEventListener('load', () => {
-  setTimeout(async () => {
-    try {
-      const status = await apiFetch('/game/status', { method: 'GET' }, false);
-      console.log('✅ Frontend-Backend sync verified:', {
-        roundId: status.roundId,
-        status: status.status,
-        multiplier: status.multiplier,
-        serverTime: new Date().toISOString()
-      });
-    } catch (err) {
-      console.warn('⚠️ Could not verify sync:', err.message);
+    window.addEventListener('load', () => {
+      setTimeout(async () => {
+        try {
+          const status = await apiFetch('/game/status', { method: 'GET' }, false);
+          console.log('✅ Frontend-Backend sync verified:', { roundId: status.roundId, status: status.status, multiplier: status.multiplier, serverTime: new Date().toISOString() });
+        } catch (err) {
+          console.warn('⚠️ Could not verify sync:', err.message);
+        }
+      }, 500);
+    });
+
+    function openAdminDashboard() {
+      adminToken = prompt('Enter Admin Token:');
+      if (!adminToken) return;
+      document.getElementById('adminModal').classList.add('show');
+      refreshAdminDashboard();
     }
-  }, 500);
-});
 
-// ============ END STAGE 3 ============
-
-
-// ============ STAGE 6: ADMIN DASHBOARD ============
-
-let adminToken = null;  // Store admin token if available
-
-function openAdminDashboard() {
-  adminToken = prompt('Enter Admin Token:');
-  if (!adminToken) return;
-  
-  document.getElementById('adminModal').classList.add('show');
-  refreshAdminDashboard();
-}
-
-async function refreshAdminDashboard() {
-  if (!adminToken) return;
-  
-  try {
-    const health = await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/health', {
-      headers: { 'x-admin-token': adminToken }
-    }).then(r => r.json());
-    
-    document.getElementById('adminActiveRounds').textContent = health.activeRounds || 0;
-    document.getElementById('adminUserCount').textContent = health.userCount || 0;
-    
-    const rtp = await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/rtp', {
-      headers: { 'x-admin-token': adminToken }
-    }).then(r => r.json());
-    
-    document.getElementById('adminRTP').textContent = (rtp.rtp || 0).toFixed(2);
-    
-    showAdminMessage('✅ Dashboard updated', false);
-  } catch (err) {
-    showAdminMessage('❌ ' + err.message, true);
-  }
-}
-
-function showAdminMessage(msg, isError) {
-  const el = document.getElementById('adminMessage');
-  el.textContent = msg;
-  el.className = `modal-message ${isError ? 'error' : 'success'}`;
-}
-
-async function adminPauseGames() {
-  if (!adminToken) return;
-  
-  try {
-    await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/pause', {
-      method: 'POST',
-      headers: {
-        'x-admin-token': adminToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ target: 'games', reason: 'Admin pause' })
-    });
-    
-    showAdminMessage('✅ Games paused', false);
-  } catch (err) {
-    showAdminMessage('❌ ' + err.message, true);
-  }
-}
-
-async function adminResumeGames() {
-  if (!adminToken) return;
-  
-  try {
-    await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/resume', {
-      method: 'POST',
-      headers: {
-        'x-admin-token': adminToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ target: 'games', reason: 'Admin resume' })
-    });
-    
-    showAdminMessage('✅ Games resumed', false);
-  } catch (err) {
-    showAdminMessage('❌ ' + err.message, true);
-  }
-}
-
-async function adminPausePayments() {
-  if (!adminToken) return;
-  
-  try {
-    await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/pause', {
-      method: 'POST',
-      headers: {
-        'x-admin-token': adminToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ target: 'payments', reason: 'Admin pause' })
-    });
-    
-    showAdminMessage('✅ Payments paused', false);
-  } catch (err) {
-    showAdminMessage('❌ ' + err.message, true);
-  }
-}
-
-async function adminResumePayments() {
-  if (!adminToken) return;
-  
-  try {
-    await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/resume', {
-      method: 'POST',
-      headers: {
-        'x-admin-token': adminToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ target: 'payments', reason: 'Admin resume' })
-    });
-    
-    showAdminMessage('✅ Payments resumed', false);
-  } catch (err) {
-    showAdminMessage('❌ ' + err.message, true);
-  }
-}
-
-// ============ END STAGE 6 ============
-
-	// ============ STAGE 7: PROVABLY FAIR ============
-
-async function viewProof() {
-  if (!currentRoundId) {
-    alert('No round to prove');
-    return;
-  }
-
-  try {
-    console.log('Fetching proof for round:', currentRoundId);
-    
-    const proof = await apiFetch(`/game/reveal/${currentRoundId}`);
-    
-    console.log('Proof received:', proof);
-    
-    // Display proof in modal
-    document.getElementById('proofSeed').textContent = proof.serverSeed || 'Not available';
-    document.getElementById('proofHash').textContent = proof.serverSeedHash || 'Not available';
-    document.getElementById('proofCrash').textContent = (proof.crashPoint || 'N/A') + 'x';
-    
-    // Show modal
-    document.getElementById('proofModal').classList.add('show');
-    
-  } catch (err) {
-    console.error('Error fetching proof:', err);
-    alert('Error loading proof: ' + err.message);
-  }
-}
-
-function copyProof() {
-  const seed = document.getElementById('proofSeed').textContent;
-  const hash = document.getElementById('proofHash').textContent;
-  const crash = document.getElementById('proofCrash').textContent;
-  
-  const proofText = `Server Seed: ${seed}\nSeed Hash: ${hash}\nCrash Point: ${crash}`;
-  
-  navigator.clipboard.writeText(proofText).then(() => {
-    alert('✅ Proof copied to clipboard');
-  }).catch(() => {
-    alert('Could not copy to clipboard');
-  });
-}
-
-// ============ END STAGE 7 ============
-
-// ============ STAGE 8: REAL-TIME ENGINE (WebSockets) ============
-
-function initializeSocket() {
-  if (!useWebSocket) {
-    console.log('WebSocket disabled, using HTTP polling');
-    return;
-  }
-
-  try {
-    console.log('🔌 Initializing Socket.IO connection...');
-    
-    socket = io(API_BASE.replace('/api', ''), {
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: 5,
-      transports: ['websocket', 'polling']  // Fallback to polling if WebSocket fails
-    });
-
-    socket.on('connect', () => {
-      console.log('✅ Socket.IO connected:', socket.id);
-      document.title = '🛩️ FlyZed (Live)';  // Show live status
-    });
-
-    socket.on('multiplier', (data) => {
+    async function refreshAdminDashboard() {
+      if (!adminToken) return;
       try {
-        if (!data) return;
-        
-        // Update multiplier display
-        const multiplier = Number(data.multiplier || 1).toFixed(2);
-        document.getElementById('multiplier').textContent = multiplier + 'x';
-        
-        // Update plane animation
-        const planeEl = document.getElementById('plane');
-        const translateX = Math.min(300, multiplier * 30);
-        const translateY = multiplier * -20;
-        planeEl.style.transform = `translateX(${translateX}px) translateY(${translateY}px) rotate(${multiplier * 5}deg)`;
-        
-        // Update status if round is running
-        if (data.status === 'running') {
-          if (!roundActive) {
+        const health = await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/health', { headers: { 'x-admin-token': adminToken } }).then(r => r.json());
+        document.getElementById('adminActiveRounds').textContent = health.activeRounds || 0;
+        document.getElementById('adminUserCount').textContent = health.userCount || 0;
+        const rtp = await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/rtp', { headers: { 'x-admin-token': adminToken } }).then(r => r.json());
+        document.getElementById('adminRTP').textContent = (rtp.rtp || 0).toFixed(2);
+        showAdminMessage('✅ Dashboard updated', false);
+      } catch (err) {
+        showAdminMessage('❌ ' + err.message, true);
+      }
+    }
+
+    function showAdminMessage(msg, isError) {
+      const el = document.getElementById('adminMessage');
+      el.textContent = msg;
+      el.className = `modal-message ${isError ? 'error' : 'success'}`;
+    }
+
+    async function adminPauseGames() {
+      if (!adminToken) return;
+      try {
+        await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/pause', {
+          method: 'POST',
+          headers: { 'x-admin-token': adminToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target: 'games', reason: 'Admin pause' })
+        });
+        showAdminMessage('✅ Games paused', false);
+      } catch (err) {
+        showAdminMessage('❌ ' + err.message, true);
+      }
+    }
+
+    async function adminResumeGames() {
+      if (!adminToken) return;
+      try {
+        await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/resume', {
+          method: 'POST',
+          headers: { 'x-admin-token': adminToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target: 'games', reason: 'Admin resume' })
+        });
+        showAdminMessage('✅ Games resumed', false);
+      } catch (err) {
+        showAdminMessage('❌ ' + err.message, true);
+      }
+    }
+
+    async function adminPausePayments() {
+      if (!adminToken) return;
+      try {
+        await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/pause', {
+          method: 'POST',
+          headers: { 'x-admin-token': adminToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target: 'payments', reason: 'Admin pause' })
+        });
+        showAdminMessage('✅ Payments paused', false);
+      } catch (err) {
+        showAdminMessage('❌ ' + err.message, true);
+      }
+    }
+
+    async function adminResumePayments() {
+      if (!adminToken) return;
+      try {
+        await fetch('https://ka-ndeke-backend-5dgy.onrender.com/api/admin/monitoring/killswitch/resume', {
+          method: 'POST',
+          headers: { 'x-admin-token': adminToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target: 'payments', reason: 'Admin resume' })
+        });
+        showAdminMessage('✅ Payments resumed', false);
+      } catch (err) {
+        showAdminMessage('❌ ' + err.message, true);
+      }
+    }
+
+    async function viewProof() {
+      if (!currentRoundId) {
+        alert('No round to prove');
+        return;
+      }
+      try {
+        const proof = await apiFetch(`/game/reveal/${currentRoundId}`);
+        document.getElementById('proofSeed').textContent = proof.serverSeed || 'Not available';
+        document.getElementById('proofHash').textContent = proof.serverSeedHash || 'Not available';
+        document.getElementById('proofCrash').textContent = (proof.crashPoint || 'N/A') + 'x';
+        document.getElementById('proofModal').classList.add('show');
+      } catch (err) {
+        console.error('Error fetching proof:', err);
+        alert('Error loading proof: ' + err.message);
+      }
+    }
+
+    function copyProof() {
+      const seed = document.getElementById('proofSeed').textContent;
+      const hash = document.getElementById('proofHash').textContent;
+      const crash = document.getElementById('proofCrash').textContent;
+      const proofText = `Server Seed: ${seed}\nSeed Hash: ${hash}\nCrash Point: ${crash}`;
+      navigator.clipboard.writeText(proofText).then(() => {
+        alert('✅ Proof copied to clipboard');
+      }).catch(() => {
+        alert('Could not copy to clipboard');
+      });
+    }
+
+    function initializeSocket() {
+      if (!useWebSocket) {
+        console.log('WebSocket disabled, using HTTP polling');
+        return;
+      }
+      try {
+        socket = io(API_BASE.replace('/api', ''), {
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          reconnectionAttempts: 5,
+          transports: ['websocket', 'polling']
+        });
+        socket.on('connect', () => {
+          console.log('✅ Socket.IO connected:', socket.id);
+          document.title = '🛩️ FlyZed (Live)';
+        });
+        socket.on('multiplier', (data) => {
+          try {
+            if (!data) return;
+            const multiplier = Number(data.multiplier || 1).toFixed(2);
+            document.getElementById('multiplier').textContent = multiplier + 'x';
+            const planeEl = document.getElementById('plane');
+            const translateX = Math.min(300, multiplier * 30);
+            const translateY = multiplier * -20;
+            planeEl.style.transform = `translateX(${translateX}px) translateY(${translateY}px) rotate(${multiplier * 5}deg)`;
+            if (data.status === 'running' && !roundActive) {
+              roundActive = true;
+              document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
+            }
+          } catch (err) {
+            console.warn('Error processing multiplier:', err);
+          }
+        });
+        socket.on('crash', (data) => {
+          try {
+            if (!data) return;
+            if (roundActive) {
+              roundActive = false;
+              crashed = true;
+              running = false;
+              const crashPoint = Number(data.crashPoint || 1).toFixed(2);
+              document.getElementById('status').textContent = `💥 Crashed at ${crashPoint}x`;
+              document.getElementById('cashOutBtn').disabled = true;
+              document.getElementById('playBtn').disabled = false;
+              document.getElementById('viewProofBtn').disabled = false;
+              console.log('💥 Round crashed at:', crashPoint);
+            }
+          } catch (err) {
+            console.warn('Error processing crash:', err);
+          }
+        });
+        socket.on('roundStarted', (data) => {
+          try {
+            console.log('🎮 Round started:', data);
             roundActive = true;
             document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
+          } catch (err) {
+            console.warn('Error processing roundStarted:', err);
           }
-        }
+        });
+        socket.on('disconnect', (reason) => {
+          console.warn('⚠️ Socket.IO disconnected:', reason);
+          document.title = '🛩️ FlyZed (Reconnecting...)';
+          if (useWebSocket && reason !== 'io client namespace disconnect') {
+            startHttpPolling();
+          }
+        });
+        socket.on('error', (error) => {
+          console.error('❌ Socket.IO error:', error);
+          document.title = '🛩️ FlyZed (Error)';
+        });
       } catch (err) {
-        console.warn('Error processing multiplier:', err);
-      }
-    });
-
-    socket.on('crash', (data) => {
-      try {
-        if (!data) return;
-        
-        // Round has crashed
-        if (roundActive) {
-          roundActive = false;
-          crashed = true;
-          running = false;
-          
-          const crashPoint = Number(data.crashPoint || 1).toFixed(2);
-          document.getElementById('status').textContent = `💥 Crashed at ${crashPoint}x`;
-          document.getElementById('cashOutBtn').disabled = true;
-          document.getElementById('playBtn').disabled = false;
-          document.getElementById('viewProofBtn').disabled = false;  // Enable proof viewing
-          
-          console.log('💥 Round crashed at:', crashPoint);
-        }
-      } catch (err) {
-        console.warn('Error processing crash:', err);
-      }
-    });
-
-    socket.on('roundStarted', (data) => {
-      try {
-        console.log('🎮 Round started:', data);
-        roundActive = true;
-        document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
-      } catch (err) {
-        console.warn('Error processing roundStarted:', err);
-      }
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.warn('⚠️ Socket.IO disconnected:', reason);
-      document.title = '🛩️ FlyZed (Reconnecting...)';
-      
-      // Fallback to HTTP polling if WebSocket fails
-      if (useWebSocket && reason !== 'io client namespace disconnect') {
-        console.log('Falling back to HTTP polling...');
+        console.error('Failed to initialize Socket.IO:', err);
+        useWebSocket = false;
         startHttpPolling();
       }
+    }
+
+    function startHttpPolling() {
+      console.log('📡 Starting HTTP polling fallback...');
+      if (!statusPoller) {
+        statusPoller = setInterval(pollRoundStatus, 50);
+      }
+    }
+
+    async function showTC() {
+      document.getElementById('tcAgree').checked = false;
+      document.getElementById('ageConfirm').checked = false;
+      document.getElementById('tcMessage').className = 'modal-message';
+      document.getElementById('tcMessage').textContent = '';
+      document.getElementById('tcModal').classList.add('show');
+    }
+
+    async function acceptTC() {
+      const tcChecked = document.getElementById('tcAgree').checked;
+      const ageChecked = document.getElementById('ageConfirm').checked;
+      if (!tcChecked || !ageChecked) {
+        const msg = document.getElementById('tcMessage');
+        msg.className = 'modal-message error';
+        msg.textContent = '❌ You must accept both terms and confirm your age';
+        return;
+      }
+      try {
+        await apiFetch('/legal/accept-terms', { method: 'POST', body: {} }, true);
+        await apiFetch('/legal/verify-age', { method: 'POST', body: { confirmed: true } }, true);
+        tcAccepted = true;
+        document.getElementById('tcModal').classList.remove('show');
+        const msg = document.getElementById('tcMessage');
+        msg.className = 'modal-message success';
+        msg.textContent = '✅ You can now play!';
+        console.log('✅ User accepted T&C and verified age');
+      } catch (err) {
+        console.error('Error accepting T&C:', err);
+        const msg = document.getElementById('tcMessage');
+        msg.className = 'modal-message error';
+        msg.textContent = '❌ Error: ' + err.message;
+      }
+    }
+
+    function rejectTC() {
+      const msg = document.getElementById('tcMessage');
+      msg.className = 'modal-message error';
+      msg.textContent = '❌ You cannot play without accepting the terms';
+      setTimeout(() => {
+        document.getElementById('tcModal').classList.remove('show');
+        document.getElementById('registerModal').classList.remove('show');
+        loginModal.classList.remove('show');
+      }, 2000);
+    }
+
+    function showGamingWarning() {
+      if (!gamingWarningShown && running) {
+        document.getElementById('gamingWarningModal').classList.add('show');
+        gamingWarningShown = true;
+      }
+    }
+
+    function selfExclude() {
+      const days = prompt('Self-exclude for how many days?\n7 = 1 week\n30 = 1 month\n90 = 3 months\n\nEnter: 7, 30, or 90');
+      if (!days) return;
+      const daysNum = Number(days);
+      if (![7, 30, 90].includes(daysNum)) {
+        alert('Invalid. Please enter 7, 30, or 90');
+        return;
+      }
+      if (confirm(`Are you sure? You will be unable to play for ${daysNum} days.`)) {
+        apiFetch('/legal/self-exclude', { method: 'POST', body: { days: daysNum } }, true)
+          .then(() => {
+            alert(`✅ You are self-excluded for ${daysNum} days. Contact support to appeal.`);
+            logout();
+          })
+          .catch(err => {
+            alert('Error: ' + err.message);
+          });
+      }
+    }
+
+    window.addEventListener('load', () => {
+      console.log('🚀 Page loaded, initializing real-time engine...');
+      initializeSocket();
     });
 
-    socket.on('error', (error) => {
-      console.error('❌ Socket.IO error:', error);
-      document.title = '🛩️ FlyZed (Error)';
+    window.addEventListener('beforeunload', () => {
+      if (socket) socket.disconnect();
+      if (statusPoller) clearInterval(statusPoller);
+      if (warningTimer) clearTimeout(warningTimer);
     });
-
-  } catch (err) {
-    console.error('Failed to initialize Socket.IO:', err);
-    console.log('Falling back to HTTP polling...');
-    useWebSocket = false;
-    startHttpPolling();
-  }
-}
-
-function startHttpPolling() {
-  console.log('📡 Starting HTTP polling fallback...');
-  if (!statusPoller) {
-	statusPoller = setInterval(pollRoundStatus, 50);  // 50ms for even tighter sync
-  }
-}
-
-// ============ END STAGE 8 ============
-
-// ============ STAGE 11: LEGAL COMPLIANCE ============
-
-async function showTC() {
-  document.getElementById('tcAgree').checked = false;
-  document.getElementById('ageConfirm').checked = false;
-  document.getElementById('tcMessage').className = 'modal-message';
-  document.getElementById('tcMessage').textContent = '';
-  document.getElementById('tcModal').classList.add('show');
-}
-
-async function acceptTC() {
-  const tcChecked = document.getElementById('tcAgree').checked;
-  const ageChecked = document.getElementById('ageConfirm').checked;
-
-  if (!tcChecked || !ageChecked) {
-    const msg = document.getElementById('tcMessage');
-    msg.className = 'modal-message error';
-    msg.textContent = '❌ You must accept both terms and confirm your age';
-    return;
-  }
-
-  try {
-    // Accept T&C on backend
-    await apiFetch('/legal/accept-terms', {
-      method: 'POST',
-      body: {}
-    }, true);
-
-    // Verify age on backend
-    await apiFetch('/legal/verify-age', {
-      method: 'POST',
-      body: { confirmed: true }
-    }, true);
-
-    tcAccepted = true;
-    document.getElementById('tcModal').classList.remove('show');
-    
-    const msg = document.getElementById('tcMessage');
-    msg.className = 'modal-message success';
-    msg.textContent = '✅ You can now play!';
-    
-    console.log('✅ User accepted T&C and verified age');
-    
-  } catch (err) {
-    console.error('Error accepting T&C:', err);
-    const msg = document.getElementById('tcMessage');
-    msg.className = 'modal-message error';
-    msg.textContent = '❌ Error: ' + err.message;
-  }
-}
-
-function rejectTC() {
-  const msg = document.getElementById('tcMessage');
-  msg.className = 'modal-message error';
-  msg.textContent = '❌ You cannot play without accepting the terms';
-  
-  // Hide modal after 2 seconds
-  setTimeout(() => {
-    document.getElementById('tcModal').classList.remove('show');
-    document.getElementById('registerModal').classList.remove('show');
-    loginModal.classList.remove('show');
-  }, 2000);
-}
-
-function showGamingWarning() {
-  if (!gamingWarningShown && running) {
-    document.getElementById('gamingWarningModal').classList.add('show');
-    gamingWarningShown = true;
-  }
-}
-
-function selfExclude() {
-  const days = prompt('Self-exclude for how many days?\n7 = 1 week\n30 = 1 month\n90 = 3 months\n\nEnter: 7, 30, or 90');
-  
-  if (!days) return;
-  
-  const daysNum = Number(days);
-  if (![7, 30, 90].includes(daysNum)) {
-    alert('Invalid. Please enter 7, 30, or 90');
-    return;
-  }
-  
-  if (confirm(`Are you sure? You will be unable to play for ${daysNum} days.`)) {
-    apiFetch('/legal/self-exclude', {
-      method: 'POST',
-      body: { days: daysNum }
-    }, true).then(() => {
-      alert(`✅ You are self-excluded for ${daysNum} days. Contact support to appeal.`);
-      logout();
-    }).catch(err => {
-      alert('Error: ' + err.message);
-    });
-  }
-}
-
-// ============ END STAGE 11 ============
-
-// Initialize WebSocket on page load
-window.addEventListener('load', () => {
-  console.log('🚀 Page loaded, initializing real-time engine...');
-  initializeSocket();
-});
-
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
-  if (socket) {
-    socket.disconnect();
-  }
-  if (statusPoller) {
-    clearInterval(statusPoller);
-  }
-  if (warningTimer) {
-    clearTimeout(warningTimer);
-  }
-});
   </script>
 </body>
 </html>
