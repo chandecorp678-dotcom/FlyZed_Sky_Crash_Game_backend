@@ -492,4 +492,171 @@ router.get('/details/:paymentId', wrapAsync(async (req, res) => {
   }
 }));
 
+/**
+ * =================== ZILS WEBHOOK CALLBACK ===================
+ * POST /api/payments/zils-webhook
+ * ZILS calls this endpoint when a deposit/withdrawal is confirmed
+ * This is where we credit the user's account balance on success
+ */
+router.post('/zils-webhook', express.json(), wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  
+  // Parse ZILS callback payload
+  const { txnId, uuid, status, amount } = req.body;
+
+  logger.info('payments.zils_webhook.received', { 
+    txnId, 
+    uuid, 
+    status, 
+    amount,
+    fullPayload: req.body
+  });
+
+  if (!txnId && !uuid) {
+    logger.warn('payments.zils_webhook.missing_txn_id', { body: req.body });
+    return res.status(400).json({ ok: false, error: 'Missing txnId or uuid from ZILS' });
+  }
+
+  try {
+    // 1. Find the payment record by transaction ID or UUID
+    const paymentRes = await db.query(
+      `SELECT id, user_id, amount, type, status FROM payments 
+       WHERE mtn_transaction_id = $1 OR external_id = $1 OR mtn_transaction_id = $2 OR external_id = $2
+       LIMIT 1`,
+      [txnId || '', uuid || '']
+    );
+
+    if (!paymentRes.rowCount) {
+      logger.warn('payments.zils_webhook.payment_not_found', { txnId, uuid });
+      return res.status(404).json({ ok: false, error: 'Payment not found' });
+    }
+
+    const payment = paymentRes.rows[0];
+
+    // 2. Check if already processed (idempotency - don't double-credit)
+    if (['confirmed', 'completed', 'failed', 'expired'].includes(payment.status)) {
+      logger.info('payments.zils_webhook.already_processed', { 
+        paymentId: payment.id, 
+        currentStatus: payment.status 
+      });
+      return res.json({ 
+        ok: true, 
+        message: 'Payment already processed', 
+        status: payment.status 
+      });
+    }
+
+    // 3. Determine new status based on ZILS response
+    let newStatus = 'pending';
+    const statusUpper = (status || '').toUpperCase();
+
+    if (statusUpper.includes('SUCCESS') || statusUpper === 'CONFIRMED' || statusUpper === 'COMPLETED' || statusUpper === 'OK') {
+      newStatus = 'confirmed';
+    } else if (statusUpper.includes('FAIL') || statusUpper === 'FAILED' || statusUpper === 'ERROR') {
+      newStatus = 'failed';
+    } else if (statusUpper === 'EXPIRED' || statusUpper.includes('TIMEOUT')) {
+      newStatus = 'expired';
+    }
+
+    logger.info('payments.zils_webhook.processing', { 
+      paymentId: payment.id, 
+      transactionId: txnId,
+      newStatus, 
+      amount: payment.amount,
+      paymentType: payment.type
+    });
+
+    // 4. Use transaction to ensure atomicity (all-or-nothing)
+    await runTransaction(db, async (client) => {
+      // Update payment status
+      await client.query(
+        `UPDATE payments 
+         SET status = $1, mtn_status = $2, updated_at = NOW() 
+         WHERE id = $3`,
+        [newStatus, status, payment.id]
+      );
+
+      // **CREDIT USER BALANCE IF DEPOSIT SUCCESSFUL**
+      if (payment.type === 'deposit' && newStatus === 'confirmed') {
+        await client.query(
+          `UPDATE users 
+           SET balance = balance + $1, updatedat = NOW() 
+           WHERE id = $2`,
+          [payment.amount, payment.user_id]
+        );
+
+        logger.info('payments.zils_webhook.balance_credited', { 
+          userId: payment.user_id, 
+          amount: payment.amount,
+          paymentId: payment.id,
+          transactionId: txnId,
+          newUserBalance: 'fetching...'
+        });
+      }
+
+      // If WITHDRAWAL and CONFIRMED, balance was already deducted when initiated
+      if (payment.type === 'withdraw' && newStatus === 'confirmed') {
+        logger.info('payments.zils_webhook.withdrawal_confirmed', { 
+          userId: payment.user_id,
+          amount: payment.amount,
+          paymentId: payment.id
+        });
+      }
+
+      // If payment FAILED, refund the balance (for withdrawals only, since deposit hasn't been credited yet)
+      if (newStatus === 'failed' && payment.type === 'withdraw') {
+        await client.query(
+          `UPDATE users 
+           SET balance = balance + $1, updatedat = NOW() 
+           WHERE id = $2`,
+          [payment.amount, payment.user_id]
+        );
+
+        logger.info('payments.zils_webhook.withdrawal_refunded', { 
+          userId: payment.user_id, 
+          amount: payment.amount,
+          paymentId: payment.id
+        });
+      }
+    });
+
+    // Fetch updated user balance to return in response
+    const updatedUser = await db.query(
+      `SELECT id, balance FROM users WHERE id = $1`,
+      [payment.user_id]
+    );
+
+    const userNewBalance = updatedUser.rows[0]?.balance || 0;
+
+    logger.info('payments.zils_webhook.success', { 
+      paymentId: payment.id,
+      status: newStatus,
+      userId: payment.user_id,
+      userNewBalance
+    });
+
+    return res.json({
+      ok: true,
+      message: `✅ Payment ${newStatus}. User balance updated.`,
+      paymentId: payment.id,
+      status: newStatus,
+      userNewBalance,
+      transactionId: txnId
+    });
+
+  } catch (err) {
+    logger.error('payments.zils_webhook.error', { 
+      message: err && err.message ? err.message : String(err),
+      txnId,
+      uuid,
+      stack: err && err.stack ? err.stack : undefined
+    });
+    return res.status(500).json({ 
+      ok: false, 
+      error: 'Failed to process ZILS webhook',
+      details: err && err.message ? err.message : 'Unknown error'
+    });
+  }
+}));
+
 module.exports = router;
