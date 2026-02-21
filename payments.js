@@ -144,9 +144,13 @@ router.post('/deposit', express.json(), wrapAsync(async (req, res) => {
         transactionId: zilsResponse.transactionId, 
         status: 'pending',
         amount,
-        transactionUUID  // ← NEW: Return to frontend
+        transactionUUID,  // ← NEW: Return to frontend
+        userZilsUuid
       };
     });
+
+    // ✅ NEW: START POLLING ZILS IN BACKGROUND (don't await)
+    pollDepositStatus(db, result.paymentId, result.transactionId, userId, amount);
 
     return res.status(202).json({
       ok: true,
