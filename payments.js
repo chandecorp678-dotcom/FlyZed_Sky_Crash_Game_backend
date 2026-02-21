@@ -481,7 +481,23 @@ async function pollDepositStatus(db, paymentId, zilsTransactionId, userId, amoun
       });
 
       // Check ZILS for transaction status
-      const statusCheck = await zils.checkTransactionStatus(zilsTransactionId);
+      let statusCheck;
+      try {
+        statusCheck = await zils.checkTransactionStatus(zilsTransactionId);
+        logger.info('payments.deposit.polling.zils_response', { 
+          paymentId,
+          attempt: pollAttempt,
+          fullResponse: JSON.stringify(statusCheck)
+        });
+      } catch (zilsErr) {
+        logger.error('payments.deposit.polling.zils_error', { 
+          paymentId,
+          attempt: pollAttempt,
+          message: zilsErr.message
+        });
+        continue; // Try again
+      }
+
       const status = (statusCheck.status || '').toUpperCase();
 
       logger.info('payments.deposit.polling.status_check', { 
@@ -490,89 +506,115 @@ async function pollDepositStatus(db, paymentId, zilsTransactionId, userId, amoun
         attempt: pollAttempt
       });
 
-      console.log(`✅ Poll attempt ${pollAttempt}: ZILS status = ${status}`);
-
       // ✅ If SUCCESSFUL/CONFIRMED → Mark as confirmed and CREDIT user balance
-      if (['confirmed', 'completed', 'success', 'successful'].includes(status)) {
-        console.log(`🎉 Deposit ${paymentId} CONFIRMED! Crediting user ${userId} with K${amount}`);
-        
-        await runTransaction(db, async (client) => {
-          // Update payment status
-          await client.query(
-            `UPDATE payments SET status = 'confirmed', mtn_status = $1, updated_at = NOW() WHERE id = $2`,
-            [status, paymentId]
-          );
-
-          // CREDIT user balance for deposit
-          const updateResult = await client.query(
-            `UPDATE users SET balance = balance + $1, updatedat = NOW() WHERE id = $2 RETURNING balance`,
-            [amount, userId]
-          );
-
-          logger.info('payments.deposit.polling.confirmed', { 
-            paymentId, 
-            userId, 
-            amount,
-            newBalance: updateResult.rows[0]?.balance,
-            attempt: pollAttempt
-          });
-
-          console.log(`✅ User ${userId} balance updated. New balance: ${updateResult.rows[0]?.balance}`);
+      if (['CONFIRMED', 'COMPLETED', 'SUCCESS', 'SUCCESSFUL', 'OK'].includes(status)) {
+        logger.info('payments.deposit.polling.confirmed_found', { 
+          paymentId,
+          status,
+          attempt: pollAttempt
         });
         
-        return; // Done!
+        try {
+          await runTransaction(db, async (client) => {
+            // Update payment status
+            await client.query(
+              `UPDATE payments SET status = 'confirmed', mtn_status = $1, updated_at = NOW() WHERE id = $2`,
+              [status, paymentId]
+            );
+
+            // CREDIT user balance for deposit
+            const updateResult = await client.query(
+              `UPDATE users SET balance = balance + $1, updatedat = NOW() WHERE id = $2 RETURNING balance`,
+              [amount, userId]
+            );
+
+            logger.info('payments.deposit.polling.confirmed', { 
+              paymentId, 
+              userId, 
+              amount,
+              newBalance: updateResult.rows[0]?.balance,
+              attempt: pollAttempt
+            });
+          });
+          
+          logger.info('payments.deposit.polling.success', { 
+            paymentId,
+            userId,
+            amount,
+            attempt: pollAttempt
+          });
+          return; // Done!
+        } catch (dbErr) {
+          logger.error('payments.deposit.polling.db_error_on_confirm', { 
+            paymentId,
+            message: dbErr.message
+          });
+          return;
+        }
       }
 
       // ✅ If FAILED → Mark as failed (don't refund, user never paid)
-      if (['failed', 'error', 'rejected', 'declined'].includes(status)) {
-        console.log(`❌ Deposit ${paymentId} FAILED! Marking as failed.`);
-        
-        await db.query(
-          `UPDATE payments SET status = 'failed', mtn_status = $1, updated_at = NOW() WHERE id = $2`,
-          [status, paymentId]
-        );
-
+      if (['FAILED', 'ERROR', 'REJECTED', 'DECLINED'].includes(status)) {
         logger.warn('payments.deposit.polling.failed', { 
           paymentId, 
           userId, 
           amount,
           attempt: pollAttempt
         });
-
+        
+        try {
+          await db.query(
+            `UPDATE payments SET status = 'failed', mtn_status = $1, updated_at = NOW() WHERE id = $2`,
+            [status, paymentId]
+          );
+        } catch (dbErr) {
+          logger.error('payments.deposit.polling.db_error_on_fail', { 
+            paymentId,
+            message: dbErr.message
+          });
+        }
         return; // Done!
       }
 
       // Still pending, continue polling...
-      console.log(`⏳ Poll attempt ${pollAttempt}: Still pending, will retry...`);
+      logger.info('payments.deposit.polling.still_pending', { 
+        paymentId,
+        status,
+        attempt: pollAttempt,
+        nextAttemptIn: POLL_INTERVAL_MS + 'ms'
+      });
 
       if (pollAttempt === MAX_POLLS) {
         // Max polls reached - mark as expired
-        await db.query(
-          `UPDATE payments SET status = 'expired', mtn_status = 'TIMEOUT', updated_at = NOW() WHERE id = $1`,
-          [paymentId]
-        );
+        try {
+          await db.query(
+            `UPDATE payments SET status = 'expired', mtn_status = 'TIMEOUT', updated_at = NOW() WHERE id = $1`,
+            [paymentId]
+          );
 
-        logger.warn('payments.deposit.polling.timeout', { 
-          paymentId, 
-          userId, 
-          amount
-        });
-
-        console.log(`⚠️ Deposit ${paymentId} polling timeout after ${MAX_POLLS} attempts`);
+          logger.warn('payments.deposit.polling.timeout', { 
+            paymentId, 
+            userId, 
+            amount
+          });
+        } catch (dbErr) {
+          logger.error('payments.deposit.polling.db_error_on_timeout', { 
+            paymentId,
+            message: dbErr.message
+          });
+        }
       }
 
     } catch (err) {
-      logger.warn('payments.deposit.polling.check_failed', { 
+      logger.error('payments.deposit.polling.check_failed', { 
         paymentId, 
         attempt: pollAttempt,
-        message: err.message
+        message: err.message,
+        stack: err.stack
       });
-      console.warn(`⚠️ Poll attempt ${pollAttempt} failed: ${err.message}, will retry...`);
-      // Continue polling on error
     }
   }
 }
-
 /**
  * GET /api/payments/status/:transactionId
  * Check status of a transaction by UUID or Transaction ID
