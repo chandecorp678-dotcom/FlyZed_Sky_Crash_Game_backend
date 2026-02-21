@@ -603,15 +603,21 @@ router.post('/payments/:paymentId/check-zils-status', requireAdmin, express.json
     const payment = paymentResult.rows[0];
     const transactionId = payment.mtn_transaction_id; // The ZILS transaction ID
 
-    logger.info('admin.payment.check_zils_status.start', { paymentId, transactionId });
+    console.log('🔍 Checking ZILS status for:', { paymentId, transactionId, type: payment.type });
+
+    logger.info('admin.payment.check_zils_status.start', { paymentId, transactionId, type: payment.type });
 
     // Call ZILS to check status
+    console.log('📡 Calling zils.checkTransactionStatus with:', transactionId);
     const statusCheck = await zils.checkTransactionStatus(transactionId);
+
+    console.log('✅ ZILS Response:', statusCheck);
 
     logger.info('admin.payment.check_zils_status.result', { 
       paymentId, 
       transactionId,
-      zilsStatus: statusCheck.status 
+      zilsStatus: statusCheck.status,
+      fullResponse: statusCheck
     });
 
     return res.json({
@@ -626,9 +632,13 @@ router.post('/payments/:paymentId/check-zils-status', requireAdmin, express.json
       message: `ZILS reports status: ${statusCheck.status}`
     });
   } catch (err) {
+    console.error('❌ ZILS check failed:', err.message);
+    console.error('Stack:', err.stack);
+    
     logger.error('admin.payment.check_zils_status.error', { 
       paymentId, 
-      message: err.message 
+      message: err.message,
+      stack: err.stack
     });
     return sendError(res, 500, 'Failed to check ZILS status', err.message);
   }
