@@ -318,11 +318,26 @@ async function start() {
     app.locals.db = pool;
 
     // ============ RUN MIGRATION ON STARTUP ============
-    logger.info('migration.balance_column.starting');
-    await fixBalanceColumnIfNeeded(pool);
-    logger.info('migration.balance_column.completed');
-    // ============ END MIGRATION ============
+logger.info('migration.balance_column.starting');
+await fixBalanceColumnIfNeeded(pool);
+logger.info('migration.balance_column.completed');
 
+// ============ FIX PAYMENTS CONSTRAINT ============
+logger.info('migration.payments_constraint.starting');
+try {
+  await pool.query(`ALTER TABLE payments DROP CONSTRAINT payments_status_check;`);
+  logger.info('migration.payments_constraint.old_dropped');
+  
+  await pool.query(`
+    ALTER TABLE payments ADD CONSTRAINT payments_status_check 
+      CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'expired', 'confirmed'));
+  `);
+  logger.info('migration.payments_constraint.success', { message: '✅ Payments constraint fixed with confirmed status' });
+} catch (err) {
+  logger.warn('migration.payments_constraint.error', { message: err && err.message ? err.message : String(err), note: 'Constraint may already be fixed' });
+}
+// ============ END MIGRATION ============
+    
     // Phase 10: Initialize kill switch
     await killSwitch.initialize(pool);
 
