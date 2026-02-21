@@ -436,4 +436,328 @@ router.post("/bets/:betId/mark-refunded", requireAdmin, async (req, res) => {
 
 logger.info("admin.routes.loaded", { ts: new Date().toISOString() });
 
+/**
+ * GET /api/admin/payments
+ * List all payments with optional filtering
+ */
+router.get('/payments', requireAdmin, wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  try {
+    const status = req.query.status || null;
+    const type = req.query.type || null; // 'deposit' or 'withdraw'
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 50));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+
+    let query = `
+      SELECT 
+        id,
+        user_id,
+        type,
+        amount,
+        phone,
+        mtn_transaction_id,
+        external_id,
+        status,
+        mtn_status,
+        error_reason,
+        created_at,
+        updated_at
+      FROM payments
+      WHERE 1=1
+    `;
+
+    const params = [];
+
+    if (status) {
+      params.push(status);
+      query += ` AND status = $${params.length}`;
+    }
+
+    if (type) {
+      params.push(type);
+      query += ` AND type = $${params.length}`;
+    }
+
+    params.push(limit);
+    params.push(offset);
+
+    query += ` ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
+    const result = await db.query(query, params);
+
+    logger.info('admin.payments.list', { 
+      count: result.rowCount, 
+      status, 
+      type, 
+      limit, 
+      offset 
+    });
+
+    return res.json({
+      ok: true,
+      payments: result.rows || [],
+      count: result.rowCount,
+      limit,
+      offset
+    });
+  } catch (err) {
+    logger.error('admin.payments.list.error', { message: err.message });
+    return sendError(res, 500, 'Failed to fetch payments');
+  }
+}));
+
+/**
+ * GET /api/admin/payments/:paymentId
+ * Get detailed payment info
+ */
+router.get('/payments/:paymentId', requireAdmin, wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const paymentId = req.params.paymentId;
+
+  if (!paymentId) {
+    return sendError(res, 400, 'paymentId required');
+  }
+
+  try {
+    const result = await db.query(
+      `SELECT 
+        id,
+        user_id,
+        type,
+        amount,
+        phone,
+        mtn_transaction_id,
+        external_id,
+        status,
+        mtn_status,
+        error_reason,
+        created_at,
+        updated_at
+       FROM payments 
+       WHERE id = $1`,
+      [paymentId]
+    );
+
+    if (!result.rowCount) {
+      return sendError(res, 404, 'Payment not found');
+    }
+
+    const payment = result.rows[0];
+
+    // Get user info
+    const userResult = await db.query(
+      `SELECT id, username, phone, balance FROM users WHERE id = $1`,
+      [payment.user_id]
+    );
+
+    logger.info('admin.payment.detail', { paymentId, status: payment.status });
+
+    return res.json({
+      ok: true,
+      payment,
+      user: userResult.rows[0] || null
+    });
+  } catch (err) {
+    logger.error('admin.payment.detail.error', { message: err.message });
+    return sendError(err, 500, 'Failed to fetch payment');
+  }
+}));
+
+/**
+ * POST /api/admin/payments/:paymentId/check-zils-status
+ * Manually check transaction status with ZILS API
+ */
+router.post('/payments/:paymentId/check-zils-status', requireAdmin, express.json(), wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const zils = require('./zils');
+  const paymentId = req.params.paymentId;
+
+  if (!paymentId) {
+    return sendError(res, 400, 'paymentId required');
+  }
+
+  try {
+    // Get payment from DB
+    const paymentResult = await db.query(
+      `SELECT 
+        id,
+        user_id,
+        type,
+        amount,
+        phone,
+        mtn_transaction_id,
+        external_id,
+        status,
+        mtn_status,
+        created_at,
+        updated_at
+       FROM payments 
+       WHERE id = $1`,
+      [paymentId]
+    );
+
+    if (!paymentResult.rowCount) {
+      return sendError(res, 404, 'Payment not found');
+    }
+
+    const payment = paymentResult.rows[0];
+    const transactionId = payment.mtn_transaction_id; // The ZILS transaction ID
+
+    logger.info('admin.payment.check_zils_status.start', { paymentId, transactionId });
+
+    // Call ZILS to check status
+    const statusCheck = await zils.checkTransactionStatus(transactionId);
+
+    logger.info('admin.payment.check_zils_status.result', { 
+      paymentId, 
+      transactionId,
+      zilsStatus: statusCheck.status 
+    });
+
+    return res.json({
+      ok: true,
+      payment,
+      zilsCheck: {
+        transactionId,
+        status: statusCheck.status,
+        details: statusCheck.details,
+        checkedAt: new Date().toISOString()
+      },
+      message: `ZILS reports status: ${statusCheck.status}`
+    });
+  } catch (err) {
+    logger.error('admin.payment.check_zils_status.error', { 
+      paymentId, 
+      message: err.message 
+    });
+    return sendError(res, 500, 'Failed to check ZILS status', err.message);
+  }
+}));
+
+/**
+ * POST /api/admin/payments/:paymentId/mark-confirmed
+ * Manually mark payment as confirmed (if ZILS API confirms but polling missed it)
+ */
+router.post('/payments/:paymentId/mark-confirmed', requireAdmin, express.json(), wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const paymentId = req.params.paymentId;
+
+  if (!paymentId) {
+    return sendError(res, 400, 'paymentId required');
+  }
+
+  try {
+    const result = await runTransaction(db, async (client) => {
+      const paymentResult = await client.query(
+        `SELECT id, user_id, type, amount, status FROM payments WHERE id = $1 FOR UPDATE`,
+        [paymentId]
+      );
+
+      if (!paymentResult.rowCount) {
+        const err = new Error('Payment not found');
+        err.status = 404;
+        throw err;
+      }
+
+      const payment = paymentResult.rows[0];
+
+      // Update payment status
+      await client.query(
+        `UPDATE payments SET status = 'confirmed', mtn_status = 'CONFIRMED', updated_at = NOW() WHERE id = $1`,
+        [paymentId]
+      );
+
+      // If deposit, credit user balance
+      if (payment.type === 'deposit') {
+        await client.query(
+          `UPDATE users SET balance = balance + $1, updatedat = NOW() WHERE id = $2`,
+          [payment.amount, payment.user_id]
+        );
+      }
+
+      return { paymentId, type: payment.type, amount: payment.amount, userId: payment.user_id };
+    });
+
+    logger.warn('admin.payment.manually_confirmed', { 
+      paymentId,
+      type: result.type,
+      amount: result.amount
+    });
+
+    return res.json({
+      ok: true,
+      message: `Payment ${paymentId} manually marked as confirmed`,
+      ...result
+    });
+  } catch (err) {
+    if (err && err.status) return sendError(res, err.status, err.message);
+    logger.error('admin.payment.mark_confirmed.error', { message: err.message });
+    return sendError(res, 500, 'Failed to mark payment confirmed', err.message);
+  }
+}));
+
+/**
+ * POST /api/admin/payments/:paymentId/mark-failed
+ * Manually mark payment as failed (if user says it failed)
+ */
+router.post('/payments/:paymentId/mark-failed', requireAdmin, express.json(), wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const paymentId = req.params.paymentId;
+  const { reason } = req.body || {};
+
+  if (!paymentId) {
+    return sendError(res, 400, 'paymentId required');
+  }
+
+  try {
+    const result = await runTransaction(db, async (client) => {
+      const paymentResult = await client.query(
+        `SELECT id, user_id, type, amount, status FROM payments WHERE id = $1 FOR UPDATE`,
+        [paymentId]
+      );
+
+      if (!paymentResult.rowCount) {
+        const err = new Error('Payment not found');
+        err.status = 404;
+        throw err;
+      }
+
+      const payment = paymentResult.rows[0];
+
+      // Update payment status
+      await client.query(
+        `UPDATE payments SET status = 'failed', mtn_status = 'FAILED', error_reason = $1, updated_at = NOW() WHERE id = $2`,
+        [reason || 'Manually marked as failed by admin', paymentId]
+      );
+
+      // If withdrawal, refund user balance
+      if (payment.type === 'withdraw') {
+        await client.query(
+          `UPDATE users SET balance = balance + $1, updatedat = NOW() WHERE id = $2`,
+          [payment.amount, payment.user_id]
+        );
+      }
+
+      return { paymentId, type: payment.type, amount: payment.amount, userId: payment.user_id };
+    });
+
+    logger.warn('admin.payment.manually_failed', { 
+      paymentId,
+      type: result.type,
+      amount: result.amount,
+      reason
+    });
+
+    return res.json({
+      ok: true,
+      message: `Payment ${paymentId} manually marked as failed`,
+      ...result
+    });
+  } catch (err) {
+    if (err && err.status) return sendError(res, err.status, err.message);
+    logger.error('admin.payment.mark_failed.error', { message: err.message });
+    return sendError(res, 500, 'Failed to mark payment failed', err.message);
+  }
+}));
+
 module.exports = router;
