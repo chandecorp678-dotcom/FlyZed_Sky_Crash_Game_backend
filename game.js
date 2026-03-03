@@ -15,9 +15,9 @@ const {
 } = require("./gameEngine");
 
 const {
-  determineNewUserOutcome,
+  determinePlayerOutcome,
   getRandomCrashPoint
-} = require("./gameEngine")._newUserOutcomes; // ✅ V2 NEW USER OUTCOME LOGIC
+} = require("./gameEngine")._outcomes; // ✅ NOW FOR ALL USERS
 
 const json = express.json();
 
@@ -29,7 +29,7 @@ const CASHOUT_PRUNE_INTERVAL_MS = Number(process.env.CASHOUT_PRUNE_INTERVAL_MS |
 
 const MIN_BET_AMOUNT = Number(process.env.MIN_BET_AMOUNT || 1);
 const MAX_BET_AMOUNT = Number(process.env.MAX_BET_AMOUNT || 1000000);
-const BET_LIMIT_THRESHOLD = 10; // ✅ V2: Bets above 10 ZMW = instant loss
+const BET_LIMIT_THRESHOLD = 10; // ✅ APPLIES TO EVERYONE
 
 function sanitizeNumeric(value, min = 0, max = Infinity) {
   const num = Number(value);
@@ -79,7 +79,7 @@ async function checkCompliance(req, res, next) {
 
 router.use(checkCompliance);
 
-// ✅ V2: Helper function to check if games_played_today needs daily reset
+// ✅ Helper: Ensure daily reset (for ALL players now)
 async function ensureDailyReset(db, userId) {
   const userRes = await db.query(
     `SELECT games_played_today_reset_at FROM users WHERE id = $1`,
@@ -92,7 +92,6 @@ async function ensureDailyReset(db, userId) {
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
-  // If last reset was before today (00:00 UTC), reset counter
   if (!lastResetAt || new Date(lastResetAt) < today) {
     await db.query(
       `UPDATE users SET games_played_today = 0, games_played_today_reset_at = $1 WHERE id = $2`,
@@ -102,11 +101,11 @@ async function ensureDailyReset(db, userId) {
   }
 }
 
-// ✅ V2: Helper to log predetermined outcomes to audit table
+// ✅ Helper: Log predetermined outcome to audit
 async function logOutcomeAudit(db, userId, roundId, gamesPlayedToday, outcome, reason, betAmount, forcedCrashPoint) {
   try {
     await db.query(
-      `INSERT INTO new_user_outcome_audit (id, user_id, round_id, game_number_today, predetermined_outcome, reason, bet_amount, forced_crash_point, created_at)
+      `INSERT INTO player_outcome_audit (id, user_id, round_id, game_number_today, predetermined_outcome, reason, bet_amount, forced_crash_point, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
       [crypto.randomUUID(), userId, roundId, gamesPlayedToday, outcome, reason, betAmount, forcedCrashPoint]
     );
@@ -115,7 +114,7 @@ async function logOutcomeAudit(db, userId, roundId, gamesPlayedToday, outcome, r
   }
 }
 
-// ============ START ROUND (with V2 new user logic + bet limit) ============
+// ============ START ROUND (with predetermined outcomes for ALL players) ============
 router.post("/start", json, async (req, res) => {
   const db = req.app.locals.db;
   if (!db) {
@@ -144,7 +143,7 @@ router.post("/start", json, async (req, res) => {
     return res.status(400).json({ error: `Bet amount must not exceed ${MAX_BET_AMOUNT}` });
   }
 
-  // ✅ V2: Check bet limit
+  // ✅ Bet limit applies to EVERYONE
   if (betAmount > BET_LIMIT_THRESHOLD) {
     logger.warn('game.start.bet_limit_exceeded', { userId: user.id, betAmount, threshold: BET_LIMIT_THRESHOLD });
     return res.status(400).json({
@@ -158,7 +157,7 @@ router.post("/start", json, async (req, res) => {
   }
 
   try {
-    // ✅ V2: Ensure daily reset
+    // ✅ Daily reset for EVERYONE
     await ensureDailyReset(db, user.id);
 
     const txResult = await runTransaction(db, async (client) => {
@@ -178,39 +177,31 @@ router.post("/start", json, async (req, res) => {
         }
       }
 
-      // ✅ V2: Get current new user status
+      // ✅ Get current game count for EVERYONE (not just new users)
       const userRes = await client.query(
-        `SELECT is_new_user, games_played_today, last_game_outcome, total_games_played FROM users WHERE id = $1`,
+        `SELECT games_played_today, last_game_outcome FROM users WHERE id = $1`,
         [user.id]
       );
 
       const userData = userRes.rows[0];
-      const isNewUser = userData.is_new_user;
       const gamesPlayedToday = userData.games_played_today;
       const lastGameOutcome = userData.last_game_outcome;
 
-      // ✅ V2: Determine if outcome is predetermined with realistic crash points
-      let isPredetermined = false;
-      let predeterminedOutcome = null;
-      let predeterminedReason = null;
-      let forcedCrashPoint = null;
+      // ✅ Determine outcome for EVERYONE using same logic
+      const outcomeCheck = determinePlayerOutcome(gamesPlayedToday, lastGameOutcome, betAmount);
+      const isPredetermined = outcomeCheck.isPredetermined;
+      const predeterminedOutcome = outcomeCheck.outcome;
+      const predeterminedReason = outcomeCheck.reason;
+      const forcedCrashPoint = outcomeCheck.forcedCrashPoint;
 
-      if (isNewUser) {
-        const outcomeCheck = determineNewUserOutcome(gamesPlayedToday, lastGameOutcome, betAmount);
-        isPredetermined = outcomeCheck.isPredetermined;
-        predeterminedOutcome = outcomeCheck.outcome;
-        predeterminedReason = outcomeCheck.reason;
-        forcedCrashPoint = outcomeCheck.forcedCrashPoint;
-
-        logger.info('game.start.predetermined_outcome_v2', {
-          userId: user.id,
-          gamesPlayedToday,
-          outcome: predeterminedOutcome,
-          reason: predeterminedReason,
-          forcedCrashPoint,
-          betAmount
-        });
-      }
+      logger.info('game.start.predetermined_outcome_all_users', {
+        userId: user.id,
+        gamesPlayedToday,
+        outcome: predeterminedOutcome,
+        reason: predeterminedReason,
+        forcedCrashPoint,
+        betAmount
+      });
 
       // Deduct balance
       const updateRes = await client.query(
@@ -227,7 +218,7 @@ router.post("/start", json, async (req, res) => {
         throw err;
       }
 
-      // ✅ V2: Increment games_played_today
+      // ✅ Increment daily game count for EVERYONE
       await client.query(
         `UPDATE users SET games_played_today = games_played_today + 1, updatedat = NOW() WHERE id = $1`,
         [user.id]
@@ -248,10 +239,8 @@ router.post("/start", json, async (req, res) => {
         [betId, status.roundId, user.id, betAmount, "active", JSON.stringify(metaData)]
       );
 
-      // ✅ V2: Log to audit table
-      if (isPredetermined) {
-        await logOutcomeAudit(db, user.id, status.roundId, gamesPlayedToday, predeterminedOutcome, predeterminedReason, betAmount, forcedCrashPoint);
-      }
+      // ✅ Log to audit for EVERYONE
+      await logOutcomeAudit(db, user.id, status.roundId, gamesPlayedToday, predeterminedOutcome, predeterminedReason, betAmount, forcedCrashPoint);
 
       return {
         betId,
@@ -337,7 +326,7 @@ router.get("/status", (req, res) => {
   }
 });
 
-// ============ CASH OUT (V2: with realistic predetermined crash points) ============
+// ============ CASH OUT (with predetermined outcomes for EVERYONE) ============
 router.post("/cashout", json, async (req, res) => {
   const db = req.app.locals.db;
   if (!db) {
@@ -395,14 +384,14 @@ router.post("/cashout", json, async (req, res) => {
         return { success: false, payout: 0, multiplier: null, balance: null, idempotent: true };
       }
 
-      // ✅ V2: Check if this bet is predetermined and enforce crash point
+      // ✅ Check if predetermined (applies to EVERYONE now)
       let engineResult;
       const currentMultiplier = Number((Date.now() - status.startedAt) / 1000 + 1).toFixed(2);
 
       if (betMeta.isPredetermined && betMeta.forcedCrashPoint) {
         const forcedCrashPoint = Number(betMeta.forcedCrashPoint);
         
-        logger.info('game.cashout.predetermined_enforcement_v2', {
+        logger.info('game.cashout.predetermined_enforcement_all_users', {
           userId: user.id,
           reason: betMeta.predeterminedReason,
           forcedCrashPoint,
@@ -411,14 +400,14 @@ router.post("/cashout", json, async (req, res) => {
           outcome: betMeta.predeterminedOutcome
         });
 
-        // Check if current multiplier is still below forced crash point
+        // Check if current multiplier reached forced crash point
         if (Number(currentMultiplier) >= forcedCrashPoint) {
           // Force crash at predetermined point
           engineResult = { win: betMeta.predeterminedOutcome === 'win', payout: 0, multiplier: forcedCrashPoint };
 
           // Update audit with actual crash info
           await client.query(
-            `UPDATE new_user_outcome_audit SET actual_crash_point = $1, actual_multiplier = $2
+            `UPDATE player_outcome_audit SET actual_crash_point = $1, actual_multiplier = $2
              WHERE user_id = $3 AND round_id = $4`,
             [forcedCrashPoint, forcedCrashPoint, user.id, bet.round_id]
           );
@@ -434,7 +423,7 @@ router.post("/cashout", json, async (req, res) => {
           }
         }
       } else {
-        // Normal engine cashout for non-new users
+        // Normal engine cashout (shouldn't happen with new system)
         try {
           engineResult = engineCashOut(user.id);
         } catch (err) {
@@ -451,7 +440,7 @@ router.post("/cashout", json, async (req, res) => {
           [0, bet.id]
         );
 
-        // ✅ V2: Update last_game_outcome to 'loss'
+        // ✅ Update last_game_outcome for EVERYONE
         await client.query(
           `UPDATE users SET last_game_outcome = 'loss', updatedat = NOW() WHERE id = $1`,
           [user.id]
