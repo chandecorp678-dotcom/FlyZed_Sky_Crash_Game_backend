@@ -15,6 +15,102 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// ✅ IMPORTANT: Apply middleware ONLY to routes that need it (not globally)
+// This allows the migration route to work properly
+
+/**
+ * POST /api/admin/migrate/v2-new-user-outcomes
+ * Safely migrate database to V2 without losing data
+ * ✅ MUST BE BEFORE requireAdmin middleware
+ */
+router.post("/migrate/v2-new-user-outcomes", express.json(), requireAdmin, wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  
+  if (!db) {
+    return sendError(res, 500, "Database not initialized");
+  }
+
+  try {
+    logger.info('admin.migrate.v2_start');
+
+    // ==================== STEP 1: Add new columns to users table ====================
+    logger.info('admin.migrate.v2.step_1_add_user_columns');
+    
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_new_user BOOLEAN NOT NULL DEFAULT true`);
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS games_played_today INTEGER NOT NULL DEFAULT 0`);
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS games_played_today_reset_at TIMESTAMPTZ`);
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_game_outcome TEXT`);
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS total_games_played INTEGER NOT NULL DEFAULT 0`);
+    
+    logger.info('admin.migrate.v2.user_columns_added');
+
+    // ==================== STEP 2: Create indexes ====================
+    logger.info('admin.migrate.v2.step_2_create_indexes');
+    
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_users_is_new_user ON users (is_new_user)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_users_games_played_today ON users (games_played_today)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_users_games_played_today_reset_at ON users (games_played_today_reset_at)`);
+    
+    logger.info('admin.migrate.v2.indexes_created');
+
+    // ==================== STEP 3: Create audit table ====================
+    logger.info('admin.migrate.v2.step_3_create_audit_table');
+    
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS new_user_outcome_audit (
+        id UUID PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        round_id TEXT NOT NULL,
+        game_number_today INTEGER NOT NULL,
+        predetermined_outcome TEXT NOT NULL CHECK (predetermined_outcome IN ('win', 'loss')),
+        reason TEXT NOT NULL,
+        bet_amount NUMERIC(18,2),
+        forced_crash_point NUMERIC(10,2),
+        actual_crash_point NUMERIC(10,2),
+        actual_multiplier NUMERIC(10,2),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    
+    logger.info('admin.migrate.v2.audit_table_created');
+
+    // ==================== STEP 4: Create audit indexes ====================
+    logger.info('admin.migrate.v2.step_4_create_audit_indexes');
+    
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_new_user_outcome_audit_user_id ON new_user_outcome_audit (user_id)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_new_user_outcome_audit_round_id ON new_user_outcome_audit (round_id)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_new_user_outcome_audit_created_at ON new_user_outcome_audit (created_at DESC)`);
+    
+    logger.info('admin.migrate.v2.audit_indexes_created');
+
+    // ==================== STEP 5: Verify migration ====================
+    logger.info('admin.migrate.v2.step_5_verify');
+    
+    const userCount = await db.query(`SELECT COUNT(*) FROM users`);
+    const auditTableExists = await db.query(`SELECT to_regclass('new_user_outcome_audit')`);
+    
+    const result = {
+      totalUsers: Number(userCount.rows[0].count),
+      auditTableExists: auditTableExists.rows[0].to_regclass !== null,
+      newColumnsAdded: true
+    };
+
+    logger.info('admin.migrate.v2_complete', result);
+
+    return res.json({
+      ok: true,
+      message: '✅ V2 migration completed successfully! All data preserved.',
+      migration: result,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (err) {
+    logger.error('admin.migrate.v2.error', { message: err.message, stack: err.stack });
+    return sendError(res, 500, 'V2 migration failed', err.message);
+  }
+}));
+
+// ✅ NOW apply requireAdmin middleware to all other routes
 router.use(requireAdmin);
 
 /**
@@ -241,98 +337,6 @@ router.get('/new-users/stats/summary/v2', wrapAsync(async (req, res) => {
   } catch (err) {
     logger.error('admin.new_users.stats.summary.error', { message: err.message });
     return sendError(res, 500, 'Failed to fetch statistics');
-  }
-}));
-
-/**
- * ADD THIS TO YOUR admin.js FILE
- * Safe migration endpoint for V2 (preserves existing data)
- */
-
-/**
- * POST /api/admin/migrate/v2-new-user-outcomes
- * Safely migrate database to V2 without losing data
- */
-router.post("/migrate/v2-new-user-outcomes", requireAdmin, express.json(), wrapAsync(async (req, res) => {
-  const db = req.app.locals.db;
-  
-  try {
-    logger.info('admin.migrate.v2_start');
-
-    // ==================== STEP 1: Add new columns to users table ====================
-    logger.info('admin.migrate.v2.step_1_add_user_columns');
-    
-    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_new_user BOOLEAN NOT NULL DEFAULT true`);
-    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS games_played_today INTEGER NOT NULL DEFAULT 0`);
-    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS games_played_today_reset_at TIMESTAMPTZ`);
-    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_game_outcome TEXT`);
-    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS total_games_played INTEGER NOT NULL DEFAULT 0`);
-    
-    logger.info('admin.migrate.v2.user_columns_added');
-
-    // ==================== STEP 2: Create indexes ====================
-    logger.info('admin.migrate.v2.step_2_create_indexes');
-    
-    await db.query(`CREATE INDEX IF NOT EXISTS idx_users_is_new_user ON users (is_new_user)`);
-    await db.query(`CREATE INDEX IF NOT EXISTS idx_users_games_played_today ON users (games_played_today)`);
-    await db.query(`CREATE INDEX IF NOT EXISTS idx_users_games_played_today_reset_at ON users (games_played_today_reset_at)`);
-    
-    logger.info('admin.migrate.v2.indexes_created');
-
-    // ==================== STEP 3: Create audit table ====================
-    logger.info('admin.migrate.v2.step_3_create_audit_table');
-    
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS new_user_outcome_audit (
-        id UUID PRIMARY KEY,
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        round_id TEXT NOT NULL,
-        game_number_today INTEGER NOT NULL,
-        predetermined_outcome TEXT NOT NULL CHECK (predetermined_outcome IN ('win', 'loss')),
-        reason TEXT NOT NULL,
-        bet_amount NUMERIC(18,2),
-        forced_crash_point NUMERIC(10,2),
-        actual_crash_point NUMERIC(10,2),
-        actual_multiplier NUMERIC(10,2),
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-    
-    logger.info('admin.migrate.v2.audit_table_created');
-
-    // ==================== STEP 4: Create audit indexes ====================
-    logger.info('admin.migrate.v2.step_4_create_audit_indexes');
-    
-    await db.query(`CREATE INDEX IF NOT EXISTS idx_new_user_outcome_audit_user_id ON new_user_outcome_audit (user_id)`);
-    await db.query(`CREATE INDEX IF NOT EXISTS idx_new_user_outcome_audit_round_id ON new_user_outcome_audit (round_id)`);
-    await db.query(`CREATE INDEX IF NOT EXISTS idx_new_user_outcome_audit_created_at ON new_user_outcome_audit (created_at DESC)`);
-    
-    logger.info('admin.migrate.v2.audit_indexes_created');
-
-    // ==================== STEP 5: Verify migration ====================
-    logger.info('admin.migrate.v2.step_5_verify');
-    
-    const userCount = await db.query(`SELECT COUNT(*) FROM users`);
-    const auditTableExists = await db.query(`SELECT to_regclass('new_user_outcome_audit')`);
-    
-    const result = {
-      totalUsers: Number(userCount.rows[0].count),
-      auditTableExists: auditTableExists.rows[0].to_regclass !== null,
-      newColumnsAdded: true
-    };
-
-    logger.info('admin.migrate.v2_complete', result);
-
-    return res.json({
-      ok: true,
-      message: '✅ V2 migration completed successfully! All data preserved.',
-      migration: result,
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (err) {
-    logger.error('admin.migrate.v2.error', { message: err.message, stack: err.stack });
-    return sendError(res, 500, 'V2 migration failed', err.message);
   }
 }));
 
