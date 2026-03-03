@@ -4,16 +4,19 @@ const EventEmitter = require('events');
 const logger = require('./logger');
 
 /**
- * Game engine with realistic new user outcome predetermination
+ * Game engine with realistic crash points for ALL PLAYERS
  * 
- * CRASH POINT RULES:
- * - Game 1 (new user): Forced crash at 1.00x
- * - Game 2 (new user): Forced crash at 1.37x
- * - Game 3+ (WIN): Random crash between 1.50x - 4.56x (realistic variance)
- * - Game 3+ (LOSS): Random crash between 1.00x - 1.37x (realistic variance)
+ * CRASH POINT RULES (For Everyone):
+ * - Game 1 of day: Forced crash at 1.00x
+ * - Game 2 of day: Forced crash at 1.37x
+ * - Game 3+ of day (WIN): Random crash between 1.50x - 4.56x
+ * - Game 3+ of day (LOSS): Random crash between 1.00x - 1.37x
+ * 
+ * PATTERN: Win, Loss, Win, Loss... (alternating daily)
+ * RESET: Daily at 00:00 UTC per player
  * 
  * BET LIMIT:
- * - Bet > 10 ZMW: FORCED LOSS at 1.00x
+ * - Bet > 10 ZMW: FORCED LOSS at 1.00x (for everyone)
  */
 
 class GameEngineEmitter extends EventEmitter {}
@@ -65,7 +68,7 @@ function safeClearTimer(t) {
   try { if (t) clearTimeout(t); } catch (e) {}
 }
 
-/* ========================= NEW USER OUTCOME LOGIC (V2) ========================= */
+/* ========================= OUTCOME LOGIC FOR ALL USERS ========================= */
 
 /**
  * Generate realistic random crash point within a range
@@ -74,7 +77,6 @@ function safeClearTimer(t) {
  * @returns {number} Random crash point between min and max
  */
 function getRandomCrashPoint(min, max) {
-  // Generate random number between min and max with 2 decimal precision
   const random = Math.random();
   const range = max - min;
   const crashPoint = min + (random * range);
@@ -82,11 +84,11 @@ function getRandomCrashPoint(min, max) {
 }
 
 /**
- * Determine if a new user's game should be predetermined with realistic crash points
- * Returns: { isPredetermined, outcome, reason, forcedCrashPoint }
+ * ✅ NEW: Determine outcome for ANY player (not just new users)
+ * Applies same system to everyone
  */
-function determineNewUserOutcome(gamesPlayedToday, lastGameOutcome, betAmount) {
-  // Check bet limit first (overrides everything)
+function determinePlayerOutcome(gamesPlayedToday, lastGameOutcome, betAmount) {
+  // Check bet limit first (everyone has this limit)
   if (betAmount > 10) {
     return {
       isPredetermined: true,
@@ -104,7 +106,7 @@ function determineNewUserOutcome(gamesPlayedToday, lastGameOutcome, betAmount) {
       outcome: 'loss',
       reason: 'forced_loss_game_1',
       forcedCrashPoint: 1.00,
-      message: 'Learning game 1 - plane crashes at 1.00x'
+      message: 'Game 1 - plane crashes at 1.00x'
     };
   }
 
@@ -115,11 +117,11 @@ function determineNewUserOutcome(gamesPlayedToday, lastGameOutcome, betAmount) {
       outcome: 'loss',
       reason: 'forced_loss_game_2',
       forcedCrashPoint: 1.37,
-      message: 'Learning game 2 - plane crashes at 1.37x'
+      message: 'Game 2 - plane crashes at 1.37x'
     };
   }
 
-  // Game 3+: Alternating win/loss with realistic variance
+  // Game 3+: Alternating win/loss with realistic variance (for EVERYONE)
   let nextOutcome = 'win'; // Default first alternation is win
   if (lastGameOutcome === 'win') {
     nextOutcome = 'loss';
@@ -445,5 +447,5 @@ module.exports = {
   dispose,
   emitter,
   _internal: { hashToCrashPoint, computeCrashPointFromSeed },
-  _newUserOutcomes: { determineNewUserOutcome, getRandomCrashPoint } // ✅ V2 EXPORTS
+  _outcomes: { determinePlayerOutcome, getRandomCrashPoint } // ✅ EXPORT FOR ALL USERS
 };
