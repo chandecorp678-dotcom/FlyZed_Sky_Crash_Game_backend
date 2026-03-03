@@ -14,21 +14,23 @@ const {
   getRoundStatus
 } = require("./gameEngine");
 
-// Use JSON body parsing for POST endpoints
+const {
+  determineNewUserOutcome,
+  getRandomCrashPoint
+} = require("./gameEngine")._newUserOutcomes; // ✅ V2 NEW USER OUTCOME LOGIC
+
 const json = express.json();
 
-// In-memory cashout rate limiter with pruning
 const cashoutTimestamps = new Map();
 const CASHOUT_MIN_INTERVAL_MS = Number(process.env.CASHOUT_MIN_INTERVAL_MS || 1000);
 const CASHOUT_PRUNE_AGE_MS = Number(process.env.CASHOUT_PRUNE_AGE_MS || 1000 * 60 * 10);
 const MAX_CASHOUT_ENTRIES = Number(process.env.MAX_CASHOUT_ENTRIES || 20000);
 const CASHOUT_PRUNE_INTERVAL_MS = Number(process.env.CASHOUT_PRUNE_INTERVAL_MS || 1000 * 60 * 5);
 
-// Min/max bet amounts
 const MIN_BET_AMOUNT = Number(process.env.MIN_BET_AMOUNT || 1);
 const MAX_BET_AMOUNT = Number(process.env.MAX_BET_AMOUNT || 1000000);
+const BET_LIMIT_THRESHOLD = 10; // ✅ V2: Bets above 10 ZMW = instant loss
 
-// Phase 9.2: Sanitize numeric input
 function sanitizeNumeric(value, min = 0, max = Infinity) {
   const num = Number(value);
   if (isNaN(num)) return null;
@@ -54,7 +56,6 @@ const pruneInterval = setInterval(() => {
 }, CASHOUT_PRUNE_INTERVAL_MS);
 if (typeof pruneInterval.unref === 'function') pruneInterval.unref();
 
-// Phase 11: Check legal compliance middleware
 async function checkCompliance(req, res, next) {
   if (!req.user || req.user.guest) {
     return next();
@@ -62,7 +63,6 @@ async function checkCompliance(req, res, next) {
 
   const db = req.app.locals.db;
   try {
-    // Check if user is self-excluded
     const exclusion = await legalCompliance.isUserExcluded(db, req.user.id);
     if (exclusion && exclusion.excluded) {
       return res.status(403).json({
@@ -79,7 +79,43 @@ async function checkCompliance(req, res, next) {
 
 router.use(checkCompliance);
 
-// ---------------- START ROUND (place bet and join global round) ----------------
+// ✅ V2: Helper function to check if games_played_today needs daily reset
+async function ensureDailyReset(db, userId) {
+  const userRes = await db.query(
+    `SELECT games_played_today_reset_at FROM users WHERE id = $1`,
+    [userId]
+  );
+
+  if (!userRes.rowCount) return;
+
+  const lastResetAt = userRes.rows[0].games_played_today_reset_at;
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+  // If last reset was before today (00:00 UTC), reset counter
+  if (!lastResetAt || new Date(lastResetAt) < today) {
+    await db.query(
+      `UPDATE users SET games_played_today = 0, games_played_today_reset_at = $1 WHERE id = $2`,
+      [now.toISOString(), userId]
+    );
+    logger.info('game.daily_reset.executed', { userId, resetTime: now.toISOString() });
+  }
+}
+
+// ✅ V2: Helper to log predetermined outcomes to audit table
+async function logOutcomeAudit(db, userId, roundId, gamesPlayedToday, outcome, reason, betAmount, forcedCrashPoint) {
+  try {
+    await db.query(
+      `INSERT INTO new_user_outcome_audit (id, user_id, round_id, game_number_today, predetermined_outcome, reason, bet_amount, forced_crash_point, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+      [crypto.randomUUID(), userId, roundId, gamesPlayedToday, outcome, reason, betAmount, forcedCrashPoint]
+    );
+  } catch (e) {
+    logger.warn('game.logOutcomeAudit.error', { message: e && e.message ? e.message : String(e) });
+  }
+}
+
+// ============ START ROUND (with V2 new user logic + bet limit) ============
 router.post("/start", json, async (req, res) => {
   const db = req.app.locals.db;
   if (!db) {
@@ -92,7 +128,6 @@ router.post("/start", json, async (req, res) => {
     return res.status(401).json({ error: "You must be logged in to place a bet" });
   }
 
-  // Phase 11: Check daily loss limit
   const limitStatus = await legalCompliance.checkDailyLossLimit(db, user.id);
   if (limitStatus && limitStatus.limitExceeded) {
     return res.status(403).json({
@@ -100,7 +135,6 @@ router.post("/start", json, async (req, res) => {
     });
   }
 
-  // Phase 9.2: Sanitize bet amount
   let betAmount = sanitizeNumeric(req.body?.betAmount, MIN_BET_AMOUNT, MAX_BET_AMOUNT);
   if (betAmount === null || betAmount < MIN_BET_AMOUNT) {
     return res.status(400).json({ error: `Bet amount must be between ${MIN_BET_AMOUNT} and ${MAX_BET_AMOUNT}` });
@@ -110,14 +144,25 @@ router.post("/start", json, async (req, res) => {
     return res.status(400).json({ error: `Bet amount must not exceed ${MAX_BET_AMOUNT}` });
   }
 
+  // ✅ V2: Check bet limit
+  if (betAmount > BET_LIMIT_THRESHOLD) {
+    logger.warn('game.start.bet_limit_exceeded', { userId: user.id, betAmount, threshold: BET_LIMIT_THRESHOLD });
+    return res.status(400).json({
+      error: `Bet amount exceeds limit of ${BET_LIMIT_THRESHOLD} ZMW. Your bet will result in instant loss at 1.00x.`
+    });
+  }
+
   const status = getRoundStatus();
   if (!status || status.status !== "running") {
     return res.status(400).json({ error: "No active running round" });
   }
 
   try {
+    // ✅ V2: Ensure daily reset
+    await ensureDailyReset(db, user.id);
+
     const txResult = await runTransaction(db, async (client) => {
-      // Phase 9.1: Check if user already has active bet on this round
+      // Check for existing active bet
       const existingBetRes = await client.query(
         `SELECT id, status FROM bets
          WHERE user_id = $1 AND round_id = $2`,
@@ -133,13 +178,47 @@ router.post("/start", json, async (req, res) => {
         }
       }
 
-      // Proceed with balance deduction and bet creation
+      // ✅ V2: Get current new user status
+      const userRes = await client.query(
+        `SELECT is_new_user, games_played_today, last_game_outcome, total_games_played FROM users WHERE id = $1`,
+        [user.id]
+      );
+
+      const userData = userRes.rows[0];
+      const isNewUser = userData.is_new_user;
+      const gamesPlayedToday = userData.games_played_today;
+      const lastGameOutcome = userData.last_game_outcome;
+
+      // ✅ V2: Determine if outcome is predetermined with realistic crash points
+      let isPredetermined = false;
+      let predeterminedOutcome = null;
+      let predeterminedReason = null;
+      let forcedCrashPoint = null;
+
+      if (isNewUser) {
+        const outcomeCheck = determineNewUserOutcome(gamesPlayedToday, lastGameOutcome, betAmount);
+        isPredetermined = outcomeCheck.isPredetermined;
+        predeterminedOutcome = outcomeCheck.outcome;
+        predeterminedReason = outcomeCheck.reason;
+        forcedCrashPoint = outcomeCheck.forcedCrashPoint;
+
+        logger.info('game.start.predetermined_outcome_v2', {
+          userId: user.id,
+          gamesPlayedToday,
+          outcome: predeterminedOutcome,
+          reason: predeterminedReason,
+          forcedCrashPoint,
+          betAmount
+        });
+      }
+
+      // Deduct balance
       const updateRes = await client.query(
         `UPDATE users
          SET balance = balance - $1, updatedat = NOW()
          WHERE id = $2 AND balance >= $1
          RETURNING balance`,
-         [betAmount, user.id]
+        [betAmount, user.id]
       );
 
       if (!updateRes.rowCount) {
@@ -148,27 +227,64 @@ router.post("/start", json, async (req, res) => {
         throw err;
       }
 
-      const betId = crypto.randomUUID();
+      // ✅ V2: Increment games_played_today
       await client.query(
-        `INSERT INTO bets (id, round_id, user_id, bet_amount, status, createdat, updatedat)
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
-         [betId, status.roundId, user.id, betAmount, "active"]
+        `UPDATE users SET games_played_today = games_played_today + 1, updatedat = NOW() WHERE id = $1`,
+        [user.id]
       );
 
-      return { betId, balance: Number(updateRes.rows[0].balance) };
+      // Create bet with predetermination metadata
+      const betId = crypto.randomUUID();
+      const metaData = {
+        isPredetermined,
+        predeterminedOutcome,
+        predeterminedReason,
+        forcedCrashPoint
+      };
+
+      await client.query(
+        `INSERT INTO bets (id, round_id, user_id, bet_amount, status, createdat, updatedat, meta)
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), $6)`,
+        [betId, status.roundId, user.id, betAmount, "active", JSON.stringify(metaData)]
+      );
+
+      // ✅ V2: Log to audit table
+      if (isPredetermined) {
+        await logOutcomeAudit(db, user.id, status.roundId, gamesPlayedToday, predeterminedOutcome, predeterminedReason, betAmount, forcedCrashPoint);
+      }
+
+      return {
+        betId,
+        balance: Number(updateRes.rows[0].balance),
+        isPredetermined,
+        predeterminedOutcome,
+        forcedCrashPoint,
+        gamesPlayedToday: gamesPlayedToday + 1
+      };
     });
 
-    // Successful DB commit -> record metrics (bet count + volume)
     try {
       metrics.incrementBet(betAmount);
     } catch (e) {
       logger.warn('metrics.incrementBet_failed_after_start', { message: e && e.message ? e.message : String(e) });
     }
 
-    // After commit: join in-memory round. If join fails, refund in a safe tx.
     try {
       const engineResp = joinRound(user.id, betAmount);
-      return res.json({ betId: txResult.betId, roundId: engineResp.roundId, serverSeedHash: engineResp.serverSeedHash, startedAt: engineResp.startedAt, balance: txResult.balance });
+      return res.json({
+        betId: txResult.betId,
+        roundId: engineResp.roundId,
+        serverSeedHash: engineResp.serverSeedHash,
+        startedAt: engineResp.startedAt,
+        balance: txResult.balance,
+        isPredetermined: txResult.isPredetermined,
+        predeterminedOutcome: txResult.predeterminedOutcome,
+        forcedCrashPoint: txResult.forcedCrashPoint,
+        gamesPlayedToday: txResult.gamesPlayedToday,
+        message: txResult.isPredetermined
+          ? `Game ${txResult.gamesPlayedToday}: Plane will crash at ${txResult.forcedCrashPoint}x (${txResult.predeterminedOutcome === 'loss' ? '💔 Loss' : '💚 Win'})`
+          : undefined
+      });
     } catch (err) {
       logger.error("joinRound error after DB changes", { message: err && err.message ? err.message : String(err) });
       try {
@@ -202,7 +318,7 @@ router.post("/start", json, async (req, res) => {
   }
 });
 
-// ---------------- ROUND STATUS ----------------
+// ============ ROUND STATUS ============
 router.get("/status", (req, res) => {
   try {
     const status = getRoundStatus();
@@ -221,7 +337,7 @@ router.get("/status", (req, res) => {
   }
 });
 
-// ---------------- CASH OUT ----------------
+// ============ CASH OUT (V2: with realistic predetermined crash points) ============
 router.post("/cashout", json, async (req, res) => {
   const db = req.app.locals.db;
   if (!db) {
@@ -251,11 +367,11 @@ router.post("/cashout", json, async (req, res) => {
   try {
     const result = await runTransaction(db, async (client) => {
       const betRes = await client.query(
-        `SELECT id, round_id, user_id, bet_amount, status, payout
+        `SELECT id, round_id, user_id, bet_amount, status, payout, meta
          FROM bets
          WHERE user_id = $1 AND round_id = $2
          FOR UPDATE`,
-         [user.id, getRoundStatus().roundId]
+        [user.id, getRoundStatus().roundId]
       );
 
       if (!betRes.rowCount) {
@@ -265,29 +381,68 @@ router.post("/cashout", json, async (req, res) => {
       }
 
       const bet = betRes.rows[0];
+      const betMeta = bet.meta || {};
 
-      // Phase 9.1: Idempotency check – if already cashed out, return original payout
+      // Idempotency check
       if (bet.status === 'cashed') {
         logger.info('game.cashout.idempotent_already_cashed', { userId: user.id, betId: bet.id, roundId: bet.round_id });
-        // Return the original payout without paying again
         const userBalance = await client.query(`SELECT balance FROM users WHERE id = $1`, [user.id]);
         return { success: true, payout: Number(bet.payout || 0), multiplier: null, balance: Number(userBalance.rows[0]?.balance || 0), idempotent: true };
       }
 
       if (bet.status !== 'active') {
-        // Bet already lost/refunded
         logger.info('game.cashout.bet_not_active', { userId: user.id, betId: bet.id, status: bet.status });
         return { success: false, payout: 0, multiplier: null, balance: null, idempotent: true };
       }
 
+      // ✅ V2: Check if this bet is predetermined and enforce crash point
       let engineResult;
-      try {
-        engineResult = engineCashOut(user.id);
-      } catch (err) {
-        logger.error("Engine cashOut error", { message: err && err.message ? err.message : String(err) });
-        const e = new Error('Server error during cashout');
-        e.status = 500;
-        throw e;
+      const currentMultiplier = Number((Date.now() - status.startedAt) / 1000 + 1).toFixed(2);
+
+      if (betMeta.isPredetermined && betMeta.forcedCrashPoint) {
+        const forcedCrashPoint = Number(betMeta.forcedCrashPoint);
+        
+        logger.info('game.cashout.predetermined_enforcement_v2', {
+          userId: user.id,
+          reason: betMeta.predeterminedReason,
+          forcedCrashPoint,
+          currentMultiplier,
+          betAmount: bet.bet_amount,
+          outcome: betMeta.predeterminedOutcome
+        });
+
+        // Check if current multiplier is still below forced crash point
+        if (Number(currentMultiplier) >= forcedCrashPoint) {
+          // Force crash at predetermined point
+          engineResult = { win: betMeta.predeterminedOutcome === 'win', payout: 0, multiplier: forcedCrashPoint };
+
+          // Update audit with actual crash info
+          await client.query(
+            `UPDATE new_user_outcome_audit SET actual_crash_point = $1, actual_multiplier = $2
+             WHERE user_id = $3 AND round_id = $4`,
+            [forcedCrashPoint, forcedCrashPoint, user.id, bet.round_id]
+          );
+        } else {
+          // Still climbing to crash point
+          if (betMeta.predeterminedOutcome === 'loss') {
+            engineResult = { win: false, payout: 0, multiplier: forcedCrashPoint };
+          } else {
+            // Win round - allow to climb but cap at forced crash point
+            const cashoutMultiplier = Number(currentMultiplier);
+            const payout = Number((Number(bet.bet_amount) * cashoutMultiplier).toFixed(2));
+            engineResult = { win: true, payout, multiplier: cashoutMultiplier };
+          }
+        }
+      } else {
+        // Normal engine cashout for non-new users
+        try {
+          engineResult = engineCashOut(user.id);
+        } catch (err) {
+          logger.error("Engine cashOut error", { message: err && err.message ? err.message : String(err) });
+          const e = new Error('Server error during cashout');
+          e.status = 500;
+          throw e;
+        }
       }
 
       if (!engineResult.win) {
@@ -295,14 +450,20 @@ router.post("/cashout", json, async (req, res) => {
           `UPDATE bets SET status = 'lost', payout = $1, updatedat = NOW() WHERE id = $2`,
           [0, bet.id]
         );
-        // record metrics for cashout attempt (payout 0)
+
+        // ✅ V2: Update last_game_outcome to 'loss'
+        await client.query(
+          `UPDATE users SET last_game_outcome = 'loss', updatedat = NOW() WHERE id = $1`,
+          [user.id]
+        );
+
         try { metrics.incrementCashout(0); } catch (e) { logger.warn('metrics.incrementCashout_failed_loss', { message: e && e.message ? e.message : String(e) }); }
         return { success: false, payout: 0, multiplier: engineResult.multiplier, balance: null };
       }
 
       const payout = Number(engineResult.payout);
       const updateUser = await client.query(
-        `UPDATE users SET balance = balance + $1, updatedat = NOW() WHERE id = $2 RETURNING balance`,
+        `UPDATE users SET balance = balance + $1, last_game_outcome = 'win', updatedat = NOW() WHERE id = $2 RETURNING balance`,
         [payout, user.id]
       );
 
@@ -317,7 +478,6 @@ router.post("/cashout", json, async (req, res) => {
         [payout, bet.id]
       );
 
-      // record metrics for successful cashout
       try { metrics.incrementCashout(payout); } catch (e) { logger.warn('metrics.incrementCashout_failed_win', { message: e && e.message ? e.message : String(e) }); }
 
       return { success: true, payout, multiplier: engineResult.multiplier, balance: Number(updateUser.rows[0].balance) };
@@ -338,7 +498,6 @@ router.post("/cashout", json, async (req, res) => {
   }
 });
 
-/* CLEANUP */
 function cleanup() {
   try {
     if (typeof pruneInterval !== 'undefined' && pruneInterval) {
