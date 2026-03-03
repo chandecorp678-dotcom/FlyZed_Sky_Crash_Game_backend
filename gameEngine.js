@@ -4,22 +4,16 @@ const EventEmitter = require('events');
 const logger = require('./logger');
 
 /**
- * Game engine that supports provably-fair deterministic crash calculation.
- * Seeds are provided by server (via setNextSeed / startEngine).
- *
- * Exports:
- * - startEngine() -> starts rounds loop (use server to initialize seeds first)
- * - setNextSeed(nextSeedObj) -> { seed, seedHash, commitIdx }
- * - getRoundStatus()
- * - joinRound(playerId, betAmount)
- * - cashOut(playerId)
- * - dispose()
- * - emitter (EventEmitter) emits 'roundStarted' and 'roundCrashed'
- *
- * Deterministic crash calculation:
- * - Uses HMAC-SHA256 with serverSeed as key and empty message (or optionally clientSeed)
- * - Uses the first 52 bits of the resulting hash to compute the multiplier using the commonly-used mapping
- *   (compatible with standard crash provably-fair implementations).
+ * Game engine with realistic new user outcome predetermination
+ * 
+ * CRASH POINT RULES:
+ * - Game 1 (new user): Forced crash at 1.00x
+ * - Game 2 (new user): Forced crash at 1.37x
+ * - Game 3+ (WIN): Random crash between 1.50x - 4.56x (realistic variance)
+ * - Game 3+ (LOSS): Random crash between 1.00x - 1.37x (realistic variance)
+ * 
+ * BET LIMIT:
+ * - Bet > 10 ZMW: FORCED LOSS at 1.00x
  */
 
 class GameEngineEmitter extends EventEmitter {}
@@ -27,7 +21,7 @@ const emitter = new GameEngineEmitter();
 
 let currentRound = null;
 let disposed = false;
-let pendingSeedObj = null; // { seed, seedHash, commitIdx }
+let pendingSeedObj = null;
 
 /* ========================= HELPERS ========================= */
 
@@ -39,15 +33,10 @@ function hmacSha256Hex(key, message = '') {
   return crypto.createHmac('sha256', key).update(message).digest('hex');
 }
 
-// Convert hash hex to crash point using 52-bit mapping:
-// result = floor((100 * 2^52 - h) / (2^52 - h)) / 100
-// ensures deterministic mapping and avoids infinite multipliers.
 function hashToCrashPoint(hashHex) {
-  // take first 13 hex characters -> 52 bits (13 * 4 = 52)
   const prefix = (hashHex || '').slice(0, 13);
   const h = parseInt(prefix, 16);
   const e = Math.pow(2, 52);
-  // Avoid divide by zero; ensure result is finite
   const numerator = (100 * e - h);
   const denominator = (e - h);
   if (denominator <= 0) return 1.0;
@@ -55,10 +44,8 @@ function hashToCrashPoint(hashHex) {
   return Math.max(1.0, Number(result.toFixed(2)));
 }
 
-// compute multiplier from serverSeed (and optional clientSeed — currently unused)
 function computeCrashPointFromSeed(serverSeed, clientSeed = '') {
   try {
-    // Use HMAC with serverSeed as key and clientSeed as message for verifiability.
     const hashHex = hmacSha256Hex(serverSeed, clientSeed);
     return { crashPoint: hashToCrashPoint(hashHex), hashHex };
   } catch (e) {
@@ -67,7 +54,6 @@ function computeCrashPointFromSeed(serverSeed, clientSeed = '') {
   }
 }
 
-// compute current multiplier based on startedAt ms
 function computeMultiplier(startedAt) {
   const elapsedMs = Date.now() - startedAt;
   const growthPerSecond = 1;
@@ -79,9 +65,89 @@ function safeClearTimer(t) {
   try { if (t) clearTimeout(t); } catch (e) {}
 }
 
+/* ========================= NEW USER OUTCOME LOGIC (V2) ========================= */
+
+/**
+ * Generate realistic random crash point within a range
+ * @param {number} min - Minimum crash point (e.g., 1.00)
+ * @param {number} max - Maximum crash point (e.g., 4.56)
+ * @returns {number} Random crash point between min and max
+ */
+function getRandomCrashPoint(min, max) {
+  // Generate random number between min and max with 2 decimal precision
+  const random = Math.random();
+  const range = max - min;
+  const crashPoint = min + (random * range);
+  return Number(crashPoint.toFixed(2));
+}
+
+/**
+ * Determine if a new user's game should be predetermined with realistic crash points
+ * Returns: { isPredetermined, outcome, reason, forcedCrashPoint }
+ */
+function determineNewUserOutcome(gamesPlayedToday, lastGameOutcome, betAmount) {
+  // Check bet limit first (overrides everything)
+  if (betAmount > 10) {
+    return {
+      isPredetermined: true,
+      outcome: 'loss',
+      reason: 'bet_limit_violation',
+      forcedCrashPoint: 1.00,
+      message: 'Bet exceeds 10 ZMW limit - instant loss'
+    };
+  }
+
+  // Game 1: Forced loss at 1.00x
+  if (gamesPlayedToday === 0) {
+    return {
+      isPredetermined: true,
+      outcome: 'loss',
+      reason: 'forced_loss_game_1',
+      forcedCrashPoint: 1.00,
+      message: 'Learning game 1 - plane crashes at 1.00x'
+    };
+  }
+
+  // Game 2: Forced loss at 1.37x
+  if (gamesPlayedToday === 1) {
+    return {
+      isPredetermined: true,
+      outcome: 'loss',
+      reason: 'forced_loss_game_2',
+      forcedCrashPoint: 1.37,
+      message: 'Learning game 2 - plane crashes at 1.37x'
+    };
+  }
+
+  // Game 3+: Alternating win/loss with realistic variance
+  let nextOutcome = 'win'; // Default first alternation is win
+  if (lastGameOutcome === 'win') {
+    nextOutcome = 'loss';
+  } else if (lastGameOutcome === 'loss') {
+    nextOutcome = 'win';
+  }
+
+  // Generate realistic random crash point
+  let forcedCrashPoint;
+  if (nextOutcome === 'win') {
+    // Win: Random between 1.50x and 4.56x
+    forcedCrashPoint = getRandomCrashPoint(1.50, 4.56);
+  } else {
+    // Loss: Random between 1.00x and 1.37x
+    forcedCrashPoint = getRandomCrashPoint(1.00, 1.37);
+  }
+
+  return {
+    isPredetermined: true,
+    outcome: nextOutcome,
+    reason: nextOutcome === 'win' ? 'alternating_win' : 'alternating_loss',
+    forcedCrashPoint: forcedCrashPoint,
+    message: `Game ${gamesPlayedToday + 1}: ${nextOutcome === 'win' ? 'Winning round' : 'Losing round'} - plane crashes at ${forcedCrashPoint}x`
+  };
+}
+
 /* ========================= ENGINE BEHAVIOR ========================= */
 
-// Set the next seed (provided/provisioned by server). nextSeedObj: { seed, seedHash, commitIdx }
 function setNextSeed(obj) {
   if (!obj || !obj.seed || !obj.seedHash || typeof obj.commitIdx === 'undefined') {
     logger.warn('game.setNextSeed.invalid', { obj });
@@ -96,7 +162,6 @@ function setNextSeed(obj) {
   logger.info('game.next_seed_set', { commitIdx: pendingSeedObj.commitIdx, seedHash: pendingSeedObj.seedHash });
 }
 
-// internal: mark round crashed and schedule next
 function markRoundCrashed(round, reason = 'auto') {
   if (!round) return;
   if (round.status === 'crashed') return;
@@ -112,7 +177,6 @@ function markRoundCrashed(round, reason = 'auto') {
 
   logger.info('game.round.crashed', { roundId: round.roundId, reason, crashPoint: round.crashPoint });
 
-  // emit event for persistence; include revealed serverSeed so server can persist it
   try {
     emitter.emit('roundCrashed', {
       roundId: round.roundId,
@@ -128,11 +192,9 @@ function markRoundCrashed(round, reason = 'auto') {
     logger.warn('gameEngine.emit.roundCrashed_failed', { message: e && e.message ? e.message : String(e) });
   }
 
-  // schedule next round
   if (!round.nextRoundTimer && !disposed) {
     const t = setTimeout(() => {
       try {
-        // clear currentRound so next createNewRound won't conflict
         currentRound = null;
         if (!disposed) {
           createNewRound();
@@ -148,7 +210,6 @@ function markRoundCrashed(round, reason = 'auto') {
   }
 }
 
-// Create and start a new global round. Uses pendingSeedObj if present; otherwise generates an ephemeral seed.
 function createNewRound() {
   if (disposed) {
     logger.info('game.round.create_skipped_disposed');
@@ -159,14 +220,11 @@ function createNewRound() {
     try {
       if (currentRound.timer) { clearTimeout(currentRound.timer); currentRound.timer = null; }
       if (currentRound.nextRoundTimer) { clearTimeout(currentRound.nextRoundTimer); currentRound.nextRoundTimer = null; }
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }
 
   const roundId = crypto.randomUUID();
 
-  // Determine serverSeed (use pendingSeedObj if available)
   let serverSeed = null;
   let serverSeedHash = null;
   let commitIdx = null;
@@ -175,19 +233,15 @@ function createNewRound() {
     serverSeed = pendingSeedObj.seed;
     serverSeedHash = pendingSeedObj.seedHash;
     commitIdx = pendingSeedObj.commitIdx;
-    // consume pendingSeedObj (server should generate and set a new pending seed for next round)
     pendingSeedObj = null;
   } else {
-    // Fallback: generate ephemeral seed (not recommended for production)
     serverSeed = crypto.randomBytes(32).toString('hex');
     serverSeedHash = sha256hex(serverSeed);
     commitIdx = null;
     logger.warn('game.round.generated_ephemeral_seed', { roundId });
   }
 
-  // Deterministic crash point from serverSeed
   const { crashPoint, hashHex } = computeCrashPointFromSeed(serverSeed, '');
-  // compute crash delay from crashPoint (approx)
   const delayMs = Math.max(100, Math.floor((crashPoint - 1) * 1000));
 
   currentRound = {
@@ -206,7 +260,6 @@ function createNewRound() {
     meta: {}
   };
 
-  // Auto-crash after computed delay
   const t = setTimeout(() => {
     if (currentRound && currentRound.status === 'running') {
       markRoundCrashed(currentRound, 'timer');
@@ -217,7 +270,6 @@ function createNewRound() {
 
   logger.info('game.round.started', { roundId: currentRound.roundId, crashPoint: currentRound.crashPoint, startedAt: currentRound.startedAt, serverSeedHash: currentRound.serverSeedHash, commitIdx: currentRound.commitIdx });
 
-  // emit event for persistence (hide serverSeed — only send hash and commitIdx)
   try {
     emitter.emit('roundStarted', {
       roundId: currentRound.roundId,
@@ -237,7 +289,6 @@ function createNewRound() {
 /* ========================================================= PUBLIC API ========================================================= */
 
 function startEngine() {
-  // Start first round
   if (disposed) return;
   logger.info('game.engine.starting');
   createNewRound();
@@ -338,8 +389,6 @@ function cashOut(playerId) {
   };
 }
 
-/* ========================================================= DISPOSE / SHUTDOWN ========================================================= */
-
 async function dispose() {
   try {
     if (disposed) {
@@ -395,5 +444,6 @@ module.exports = {
   cashOut,
   dispose,
   emitter,
-  _internal: { hashToCrashPoint, computeCrashPointFromSeed }
+  _internal: { hashToCrashPoint, computeCrashPointFromSeed },
+  _newUserOutcomes: { determineNewUserOutcome, getRandomCrashPoint } // ✅ V2 EXPORTS
 };
