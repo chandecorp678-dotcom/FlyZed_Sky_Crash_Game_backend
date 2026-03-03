@@ -52,8 +52,6 @@ function computeMultiplier(startedAt) {
 
 /**
  * Generate realistic random crash point within a range
- * Loss range: 1.00x - 1.37x
- * Win range: 1.50x - 4.56x
  */
 function getRandomCrashPoint(min, max) {
   const random = Math.random();
@@ -63,23 +61,40 @@ function getRandomCrashPoint(min, max) {
 }
 
 /**
- * ✅ FIXED: Determine outcome for ALL players
+ * ✅ NEW: Determine outcome for ALL players
  * 
- * Win rounds: maxCrashPoint = 4.56x (player can cash out anytime before this)
- * Loss rounds: random crash between 1.00x - 1.37x
+ * When NO bets placed: Free flow (can reach 100x+)
+ * When bets placed: 
+ *   - Game 1: Loss at 1.00x
+ *   - Game 2: Loss at 1.37x
+ *   - Game 3+: Win/Lose alternating with 4.56x cap for wins
  */
-function determinePlayerOutcome(gamesPlayedToday, lastGameOutcome, betAmount) {
+function determinePlayerOutcome(gamesPlayedToday, lastGameOutcome, betAmount, hasBetsInRound) {
   // Check bet limit first
-  if (betAmount > 10) {
+  if (betAmount >= 10) {
     return {
       isPredetermined: true,
       outcome: 'loss',
       reason: 'bet_limit_violation',
       forcedCrashPoint: 1.00,
       maxCrashPoint: 1.00,
-      message: 'Bet exceeds 10 ZMW limit - instant loss'
+      message: 'Bet is K10 or more - instant loss at 1.00x'
     };
   }
+
+  // ✅ NEW: If NO bets in round yet, use free flow (no predetermined outcome)
+  if (!hasBetsInRound) {
+    return {
+      isPredetermined: false,
+      outcome: null,
+      reason: 'free_flow_no_bets',
+      forcedCrashPoint: null,
+      maxCrashPoint: 100.00, // Allow multiplier to reach very high
+      message: 'No bets placed - free flow mode (watch the odds!)'
+    };
+  }
+
+  // ✅ Bets ARE placed - now apply predetermined sequence
 
   // Game 1: Forced loss at 1.00x
   if (gamesPlayedToday === 0) {
@@ -117,12 +132,9 @@ function determinePlayerOutcome(gamesPlayedToday, lastGameOutcome, betAmount) {
   let maxCrashPoint;
 
   if (nextOutcome === 'win') {
-    // ✅ FIX: Win rounds crash at 4.56x MAXIMUM
-    // Player can cash out anytime before 4.56x
-    forcedCrashPoint = 4.56; // Always set to max
-    maxCrashPoint = 4.56;    // Cap at 4.56x
+    forcedCrashPoint = 4.56;
+    maxCrashPoint = 4.56;
   } else {
-    // Loss: Random between 1.00x and 1.37x
     forcedCrashPoint = getRandomCrashPoint(1.00, 1.37);
     maxCrashPoint = forcedCrashPoint;
   }
@@ -233,13 +245,14 @@ function createNewRound() {
   }
 
   const { crashPoint } = computeCrashPointFromSeed(serverSeed, '');
-  // ✅ FIX: Use 4.56x as default crash point (allows full range for win rounds)
-  const maxCrashPoint = 4.56;
+  
+  // ✅ NEW: Use high max crash point (100x) for free flow mode when no bets
+  const maxCrashPoint = 100.00; // Will be overridden when bets placed
   const delayMs = Math.max(100, Math.floor((maxCrashPoint - 1) * 1000));
 
   currentRound = {
     roundId,
-    crashPoint: maxCrashPoint, // ✅ Always 4.56x for the timer
+    crashPoint: maxCrashPoint,
     maxCrashPoint: maxCrashPoint,
     serverSeed,
     serverSeedHash,
@@ -249,15 +262,16 @@ function createNewRound() {
     endedAt: null,
     locked: false,
     players: new Map(),
+    hasBets: false, // ✅ NEW: Track if bets have been placed
     timer: null,
     nextRoundTimer: null,
     meta: {}
   };
 
-  // ✅ FIX: Auto-crash at 4.56x if round still running
+  // ✅ NEW: Auto-crash at 100x if round still running (free flow mode)
   const t = setTimeout(() => {
     if (currentRound && currentRound.status === 'running') {
-      markRoundCrashed(currentRound, 'max_crash_point_reached');
+      markRoundCrashed(currentRound, 'free_flow_max_reached');
     }
   }, delayMs);
   if (typeof t.unref === 'function') t.unref();
@@ -266,7 +280,8 @@ function createNewRound() {
   logger.info('game.round.started', { 
     roundId: currentRound.roundId, 
     maxCrashPoint: currentRound.maxCrashPoint,
-    startedAt: currentRound.startedAt 
+    startedAt: currentRound.startedAt,
+    hasBets: currentRound.hasBets 
   });
 
   try {
@@ -303,7 +318,7 @@ function getRoundStatus() {
   if (currentRound.status === 'running') {
     multiplier = computeMultiplier(currentRound.startedAt);
 
-    // ✅ FIX: Check against maxCrashPoint (4.56x) instead of random crash point
+    // ✅ Check against maxCrashPoint (changes based on hasBets)
     if (multiplier >= currentRound.maxCrashPoint) {
       markRoundCrashed(currentRound, 'max_multiplier_reached');
       multiplier = currentRound.maxCrashPoint;
@@ -319,8 +334,47 @@ function getRoundStatus() {
     startedAt: currentRound.startedAt,
     endedAt: currentRound.endedAt,
     serverSeedHash: currentRound.serverSeedHash,
-    commitIdx: currentRound.commitIdx
+    commitIdx: currentRound.commitIdx,
+    hasBets: currentRound.hasBets // ✅ NEW: Expose bet status
   };
+}
+
+// ✅ NEW: Function to call when first bet is placed in round
+function notifyFirstBetPlaced(roundId, predeterminedCrashPoint) {
+  if (!currentRound || currentRound.roundId !== roundId) {
+    logger.warn('game.notifyFirstBetPlaced.round_mismatch', { roundId, currentRoundId: currentRound?.roundId });
+    return;
+  }
+
+  if (currentRound.hasBets) {
+    logger.info('game.notifyFirstBetPlaced.already_has_bets', { roundId });
+    return;
+  }
+
+  // ✅ Update round state: now has bets, change max crash point
+  currentRound.hasBets = true;
+  currentRound.maxCrashPoint = predeterminedCrashPoint;
+
+  logger.info('game.notifyFirstBetPlaced.updated', { 
+    roundId, 
+    newMaxCrashPoint: predeterminedCrashPoint,
+    oldMaxCrashPoint: 100.00
+  });
+
+  // Clear old timer (100x) and set new timer (predetermined crash point)
+  if (currentRound.timer) {
+    clearTimeout(currentRound.timer);
+    currentRound.timer = null;
+  }
+
+  const delayMs = Math.max(100, Math.floor((predeterminedCrashPoint - 1) * 1000));
+  const t = setTimeout(() => {
+    if (currentRound && currentRound.status === 'running') {
+      markRoundCrashed(currentRound, 'predetermined_crash_reached');
+    }
+  }, delayMs);
+  if (typeof t.unref === 'function') t.unref();
+  currentRound.timer = t;
 }
 
 function joinRound(playerId, betAmount) {
@@ -364,7 +418,6 @@ function cashOut(playerId) {
 
   let multiplier = computeMultiplier(currentRound.startedAt);
 
-  // ✅ FIX: Check against maxCrashPoint
   if (multiplier >= currentRound.maxCrashPoint || currentRound.status !== 'running') {
     if (currentRound.status !== 'crashed') {
       markRoundCrashed(currentRound, 'cashout_at_max');
@@ -435,6 +488,7 @@ module.exports = {
   joinRound,
   cashOut,
   dispose,
+  notifyFirstBetPlaced, // ✅ NEW: Export for use in game.js
   emitter,
   _internal: { hashToCrashPoint, computeCrashPointFromSeed },
   _outcomes: { determinePlayerOutcome, getRandomCrashPoint }
