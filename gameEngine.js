@@ -3,22 +3,6 @@ const crypto = require('crypto');
 const EventEmitter = require('events');
 const logger = require('./logger');
 
-/**
- * Game engine with realistic crash points for ALL PLAYERS
- * 
- * CRASH POINT RULES (For Everyone):
- * - Game 1 of day: Forced crash at 1.00x
- * - Game 2 of day: Forced crash at 1.37x
- * - Game 3+ of day (WIN): Random crash between 1.50x - 4.56x
- * - Game 3+ of day (LOSS): Random crash between 1.00x - 1.37x
- * 
- * PATTERN: Win, Loss, Win, Loss... (alternating daily)
- * RESET: Daily at 00:00 UTC per player
- * 
- * BET LIMIT:
- * - Bet > 10 ZMW: FORCED LOSS at 1.00x (for everyone)
- */
-
 class GameEngineEmitter extends EventEmitter {}
 const emitter = new GameEngineEmitter();
 
@@ -64,17 +48,12 @@ function computeMultiplier(startedAt) {
   return Number(multiplier.toFixed(2));
 }
 
-function safeClearTimer(t) {
-  try { if (t) clearTimeout(t); } catch (e) {}
-}
-
-/* ========================= OUTCOME LOGIC FOR ALL USERS ========================= */
+/* ========================= OUTCOME LOGIC ========================= */
 
 /**
  * Generate realistic random crash point within a range
- * @param {number} min - Minimum crash point (e.g., 1.00)
- * @param {number} max - Maximum crash point (e.g., 4.56)
- * @returns {number} Random crash point between min and max
+ * Loss range: 1.00x - 1.37x
+ * Win range: 1.50x - 4.56x
  */
 function getRandomCrashPoint(min, max) {
   const random = Math.random();
@@ -84,17 +63,20 @@ function getRandomCrashPoint(min, max) {
 }
 
 /**
- * ✅ NEW: Determine outcome for ANY player (not just new users)
- * Applies same system to everyone
+ * ✅ FIXED: Determine outcome for ALL players
+ * 
+ * Win rounds: maxCrashPoint = 4.56x (player can cash out anytime before this)
+ * Loss rounds: random crash between 1.00x - 1.37x
  */
 function determinePlayerOutcome(gamesPlayedToday, lastGameOutcome, betAmount) {
-  // Check bet limit first (everyone has this limit)
+  // Check bet limit first
   if (betAmount > 10) {
     return {
       isPredetermined: true,
       outcome: 'loss',
       reason: 'bet_limit_violation',
       forcedCrashPoint: 1.00,
+      maxCrashPoint: 1.00,
       message: 'Bet exceeds 10 ZMW limit - instant loss'
     };
   }
@@ -106,6 +88,7 @@ function determinePlayerOutcome(gamesPlayedToday, lastGameOutcome, betAmount) {
       outcome: 'loss',
       reason: 'forced_loss_game_1',
       forcedCrashPoint: 1.00,
+      maxCrashPoint: 1.00,
       message: 'Game 1 - plane crashes at 1.00x'
     };
   }
@@ -117,26 +100,31 @@ function determinePlayerOutcome(gamesPlayedToday, lastGameOutcome, betAmount) {
       outcome: 'loss',
       reason: 'forced_loss_game_2',
       forcedCrashPoint: 1.37,
+      maxCrashPoint: 1.37,
       message: 'Game 2 - plane crashes at 1.37x'
     };
   }
 
-  // Game 3+: Alternating win/loss with realistic variance (for EVERYONE)
-  let nextOutcome = 'win'; // Default first alternation is win
+  // Game 3+: Alternating win/loss
+  let nextOutcome = 'win';
   if (lastGameOutcome === 'win') {
     nextOutcome = 'loss';
   } else if (lastGameOutcome === 'loss') {
     nextOutcome = 'win';
   }
 
-  // Generate realistic random crash point
   let forcedCrashPoint;
+  let maxCrashPoint;
+
   if (nextOutcome === 'win') {
-    // Win: Random between 1.50x and 4.56x
-    forcedCrashPoint = getRandomCrashPoint(1.50, 4.56);
+    // ✅ FIX: Win rounds crash at 4.56x MAXIMUM
+    // Player can cash out anytime before 4.56x
+    forcedCrashPoint = 4.56; // Always set to max
+    maxCrashPoint = 4.56;    // Cap at 4.56x
   } else {
     // Loss: Random between 1.00x and 1.37x
     forcedCrashPoint = getRandomCrashPoint(1.00, 1.37);
+    maxCrashPoint = forcedCrashPoint;
   }
 
   return {
@@ -144,7 +132,10 @@ function determinePlayerOutcome(gamesPlayedToday, lastGameOutcome, betAmount) {
     outcome: nextOutcome,
     reason: nextOutcome === 'win' ? 'alternating_win' : 'alternating_loss',
     forcedCrashPoint: forcedCrashPoint,
-    message: `Game ${gamesPlayedToday + 1}: ${nextOutcome === 'win' ? 'Winning round' : 'Losing round'} - plane crashes at ${forcedCrashPoint}x`
+    maxCrashPoint: maxCrashPoint,
+    message: nextOutcome === 'win' 
+      ? `Game ${gamesPlayedToday + 1}: Winning round - cash out before 4.56x or plane crashes!`
+      : `Game ${gamesPlayedToday + 1}: Losing round - plane crashes at ${forcedCrashPoint}x`
   };
 }
 
@@ -161,7 +152,7 @@ function setNextSeed(obj) {
     seedHash: String(obj.seedHash),
     commitIdx: Number(obj.commitIdx)
   };
-  logger.info('game.next_seed_set', { commitIdx: pendingSeedObj.commitIdx, seedHash: pendingSeedObj.seedHash });
+  logger.info('game.next_seed_set', { commitIdx: pendingSeedObj.commitIdx });
 }
 
 function markRoundCrashed(round, reason = 'auto') {
@@ -200,8 +191,6 @@ function markRoundCrashed(round, reason = 'auto') {
         currentRound = null;
         if (!disposed) {
           createNewRound();
-        } else {
-          logger.info('game.round.not_restarting_because_disposed', { roundId: round.roundId });
         }
       } catch (e) {
         logger.error('game.round.schedule_next_error', { message: e && e.message ? e.message : String(e) });
@@ -243,12 +232,15 @@ function createNewRound() {
     logger.warn('game.round.generated_ephemeral_seed', { roundId });
   }
 
-  const { crashPoint, hashHex } = computeCrashPointFromSeed(serverSeed, '');
-  const delayMs = Math.max(100, Math.floor((crashPoint - 1) * 1000));
+  const { crashPoint } = computeCrashPointFromSeed(serverSeed, '');
+  // ✅ FIX: Use 4.56x as default crash point (allows full range for win rounds)
+  const maxCrashPoint = 4.56;
+  const delayMs = Math.max(100, Math.floor((maxCrashPoint - 1) * 1000));
 
   currentRound = {
     roundId,
-    crashPoint,
+    crashPoint: maxCrashPoint, // ✅ Always 4.56x for the timer
+    maxCrashPoint: maxCrashPoint,
     serverSeed,
     serverSeedHash,
     commitIdx,
@@ -262,15 +254,20 @@ function createNewRound() {
     meta: {}
   };
 
+  // ✅ FIX: Auto-crash at 4.56x if round still running
   const t = setTimeout(() => {
     if (currentRound && currentRound.status === 'running') {
-      markRoundCrashed(currentRound, 'timer');
+      markRoundCrashed(currentRound, 'max_crash_point_reached');
     }
   }, delayMs);
   if (typeof t.unref === 'function') t.unref();
   currentRound.timer = t;
 
-  logger.info('game.round.started', { roundId: currentRound.roundId, crashPoint: currentRound.crashPoint, startedAt: currentRound.startedAt, serverSeedHash: currentRound.serverSeedHash, commitIdx: currentRound.commitIdx });
+  logger.info('game.round.started', { 
+    roundId: currentRound.roundId, 
+    maxCrashPoint: currentRound.maxCrashPoint,
+    startedAt: currentRound.startedAt 
+  });
 
   try {
     emitter.emit('roundStarted', {
@@ -306,9 +303,10 @@ function getRoundStatus() {
   if (currentRound.status === 'running') {
     multiplier = computeMultiplier(currentRound.startedAt);
 
-    if (multiplier >= currentRound.crashPoint) {
-      markRoundCrashed(currentRound, 'threshold');
-      multiplier = currentRound.crashPoint;
+    // ✅ FIX: Check against maxCrashPoint (4.56x) instead of random crash point
+    if (multiplier >= currentRound.maxCrashPoint) {
+      markRoundCrashed(currentRound, 'max_multiplier_reached');
+      multiplier = currentRound.maxCrashPoint;
     }
   } else {
     multiplier = currentRound.crashPoint;
@@ -366,11 +364,12 @@ function cashOut(playerId) {
 
   let multiplier = computeMultiplier(currentRound.startedAt);
 
-  if (multiplier >= currentRound.crashPoint || currentRound.status !== 'running') {
+  // ✅ FIX: Check against maxCrashPoint
+  if (multiplier >= currentRound.maxCrashPoint || currentRound.status !== 'running') {
     if (currentRound.status !== 'crashed') {
-      markRoundCrashed(currentRound, 'cashout-detected-crash');
+      markRoundCrashed(currentRound, 'cashout_at_max');
     }
-    return { win: false, payout: 0, multiplier: currentRound.crashPoint };
+    return { win: false, payout: 0, multiplier: currentRound.maxCrashPoint };
   }
 
   player.cashedOut = true;
@@ -382,7 +381,7 @@ function cashOut(playerId) {
   player.cashedAt = Date.now();
   player.cashedMultiplier = multiplier;
 
-  logger.info('game.player.cashed', { playerId, roundId: currentRound.roundId, multiplier, payout });
+  logger.info('game.player.cashed', { playerId, multiplier, payout });
 
   return {
     win: true,
@@ -422,21 +421,12 @@ async function dispose() {
       }
     } catch (e) {}
 
-    try {
-      if (currentRound.serverSeed) {
-        currentRound.serverSeed = null;
-      }
-    } catch (e) {}
-
-    logger.info('game.dispose.completed', { roundId: currentRound.roundId });
-
+    logger.info('game.dispose.completed');
     currentRound = null;
   } catch (err) {
     logger.error('game.dispose.error', { message: err && err.message ? err.message : String(err) });
   }
 }
-
-/* ========================================================= EXPORTS ========================================================= */
 
 module.exports = {
   startEngine,
@@ -447,5 +437,5 @@ module.exports = {
   dispose,
   emitter,
   _internal: { hashToCrashPoint, computeCrashPointFromSeed },
-  _outcomes: { determinePlayerOutcome, getRandomCrashPoint } // ✅ EXPORT FOR ALL USERS
+  _outcomes: { determinePlayerOutcome, getRandomCrashPoint }
 };
