@@ -56,6 +56,36 @@
     .wallet-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top: 8px;}
     .wallet-row button{background:linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 212, 255, 0.05) 100%);color:var(--accent);border-radius:10px;padding:12px 16px;font-weight:600;flex:0;border:2px solid rgba(0, 212, 255, 0.2);}
     .wallet-row button:hover {background:linear-gradient(135deg, rgba(0, 212, 255, 0.25) 0%, rgba(0, 212, 255, 0.1) 100%);border-color:var(--accent);}
+    
+    /* ✅ NEW: WhatsApp Button Styles */
+    .whatsapp-button {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(135deg, #25D366 0%, #20BA58 100%);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
+      transition: all 0.3s ease;
+      z-index: 999;
+    }
+    
+    .whatsapp-button:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 20px rgba(37, 211, 102, 0.6);
+    }
+    
+    .whatsapp-button:active {
+      transform: scale(0.95);
+    }
+    
     .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0, 0, 0, 0.85);backdrop-filter: blur(5px);display:none;align-items:center;justify-content:center;z-index:1000;padding:12px;animation: fadeIn 0.3s ease;}
     .modal.show{display:flex;}
     .modal-content{background:var(--panel);padding:28px;border-radius:16px;color:var(--white);width:100%;max-width:480px;max-height:90vh;overflow:auto;border:2px solid rgba(0, 212, 255, 0.2);box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);animation: slideIn 0.3s ease;}
@@ -73,8 +103,8 @@
     ::-webkit-scrollbar-track { background: var(--bg-secondary); }
     ::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.3);border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: rgba(0, 212, 255, 0.5); }
-    @media (max-width:768px){ header h1{font-size:20px;} .game-box{min-height:300px;padding:16px;} .game-content{flex-direction:column;gap:20px;} #multiplier{font-size:48px;} #plane{width:100px;height:50px;} .controls{padding:12px;gap:10px;} input[type=number]{font-size:16px;} button {padding: 14px 16px;font-size: 13px;} .row{flex-direction:column;} .row input, .row button{width:100%;} .modal-content{max-width:90%;padding:20px;} }
-    @media (max-width:480px){ header{padding:12px 16px;} header h1{font-size:18px;} #multiplier{font-size:40px;} .game-box{margin:8px;} .controls{margin:8px;} button {padding: 12px 14px;font-size: 12px;} }
+    @media (max-width:768px){ header h1{font-size:20px;} .game-box{min-height:300px;padding:16px;} .game-content{flex-direction:column;gap:20px;} #multiplier{font-size:48px;} #plane{width:100px;height:50px;} .controls{padding:12px;gap:10px;} input[type=number]{font-size:16px;} button {padding: 14px 16px;font-size: 13px;} .row{flex-direction:column;} .row input, .row button{width:100%;} .modal-content{max-width:90%;padding:20px;} .whatsapp-button{width:50px;height:50px;font-size:24px;} }
+    @media (max-width:480px){ header{padding:12px 16px;} header h1{font-size:18px;} #multiplier{font-size:40px;} .game-box{margin:8px;} .controls{margin:8px;} button {padding: 12px 14px;font-size: 12px;} .whatsapp-button{bottom:15px;right:15px;} }
     button:focus,input:focus{outline:none;}
   </style>
 </head>
@@ -88,6 +118,11 @@
       <button id="logoutBtn" onclick="logout()" class="btn-secondary hidden">Logout</button>
     </div>
   </header>
+
+  <!-- ✅ NEW: WhatsApp Button -->
+  <button class="whatsapp-button" id="whatsappBtn" title="Contact Support" onclick="openWhatsAppSupport()">
+    💬
+  </button>
 
   <main>
     <section class="panel">
@@ -125,194 +160,236 @@
         <button class="btn-secondary" onclick="openCheckStatus()">📊 Check Status</button>
       </div>
     </section>
+
+    <!-- ✅ NEW: WhatsApp Support Modal -->
+    <div class="modal" id="whatsappModal">
+      <div class="modal-content">
+        <h3>💬 WhatsApp Support</h3>
+        
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+          Hi! We're here to help. Please provide the following details:
+        </p>
+        
+        <input 
+          id="withdrawAmount" 
+          type="number" 
+          placeholder="Amount to withdraw (K)" 
+          step="0.01"
+          min="5"
+        />
+        
+        <input 
+          id="withdrawPhone" 
+          type="text" 
+          placeholder="Destination phone (e.g., 0761948460)" 
+        />
+        
+        <textarea 
+          id="withdrawMessage" 
+          placeholder="Additional message (optional)" 
+          style="width:100%;padding:12px 16px;border-radius:10px;border:2px solid rgba(0, 212, 255, 0.2);background:var(--bg-secondary);color:var(--white);resize:vertical;min-height:80px;font-family:inherit;transition: all 0.3s ease;"
+          onkeyup="this.style.borderColor = this.value ? 'var(--accent)' : 'rgba(0, 212, 255, 0.2)';"
+        ></textarea>
+        
+        <div id="whatsappMessage" class="modal-message"></div>
+        
+        <div class="modal-actions">
+          <button class="primary" onclick="sendWhatsAppMessage()">📱 Send to WhatsApp</button>
+          <button class="btn-secondary" onclick="hideWhatsAppModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <div class="modal" id="checkStatusModal">
-  <div class="modal-content">
-    <h3>📊 Check Deposit Status</h3>
-    
-    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
-      Enter the Transaction ID (UUID) from your deposit confirmation message.
-    </p>
-    
-    <input 
-      id="statusTransactionId" 
-      type="text" 
-      placeholder="Enter Transaction ID (UUID)" 
-      style="margin-bottom:12px;"
-    />
-    
-    <div id="statusMessage" class="modal-message"></div>
-    
-    <div style="background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;display:none;" id="statusDetails">
-      <p style="font-size:12px;color:var(--muted);margin:8px 0;">
-        <strong>Payment ID:</strong> <code id="detailPaymentId" style="color:var(--accent);font-size:11px;"></code>
-      </p>
-      <p style="font-size:12px;color:var(--muted);margin:8px 0;">
-        <strong>Status:</strong> <span id="detailStatus" style="font-weight:bold;"></span>
-      </p>
-      <p style="font-size:12px;color:var(--muted);margin:8px 0;">
-        <strong>Amount:</strong> <span id="detailAmount" style="font-weight:bold;color:var(--success);"></span>
-      </p>
-      <p style="font-size:12px;color:var(--muted);margin:8px 0;">
-        <strong>Transaction Type:</strong> <span id="detailType" style="font-weight:bold;"></span>
-      </p>
-      <p style="font-size:12px;color:var(--muted);margin:8px 0;">
-        <strong>Created:</strong> <span id="detailCreated" style="font-size:11px;"></span>
-      </p>
+      <div class="modal-content">
+        <h3>📊 Check Deposit Status</h3>
+        
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+          Enter the Transaction ID (UUID) from your deposit confirmation message.
+        </p>
+        
+        <input 
+          id="statusTransactionId" 
+          type="text" 
+          placeholder="Enter Transaction ID (UUID)" 
+          style="margin-bottom:12px;"
+        />
+        
+        <div id="statusMessage" class="modal-message"></div>
+        
+        <div style="background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;display:none;" id="statusDetails">
+          <p style="font-size:12px;color:var(--muted);margin:8px 0;">
+            <strong>Payment ID:</strong> <code id="detailPaymentId" style="color:var(--accent);font-size:11px;"></code>
+          </p>
+          <p style="font-size:12px;color:var(--muted);margin:8px 0;">
+            <strong>Status:</strong> <span id="detailStatus" style="font-weight:bold;"></span>
+          </p>
+          <p style="font-size:12px;color:var(--muted);margin:8px 0;">
+            <strong>Amount:</strong> <span id="detailAmount" style="font-weight:bold;color:var(--success);"></span>
+          </p>
+          <p style="font-size:12px;color:var(--muted);margin:8px 0;">
+            <strong>Transaction Type:</strong> <span id="detailType" style="font-weight:bold;"></span>
+          </p>
+          <p style="font-size:12px;color:var(--muted);margin:8px 0;">
+            <strong>Created:</strong> <span id="detailCreated" style="font-size:11px;"></span>
+          </p>
+        </div>
+        
+        <div class="modal-actions">
+          <button class="primary" onclick="checkTransactionStatus()">🔍 Check Status</button>
+          <button class="btn-secondary" onclick="hideModals()">Cancel</button>
+        </div>
+      </div>
     </div>
-    
-    <div class="modal-actions">
-      <button class="primary" onclick="checkTransactionStatus()">🔍 Check Status</button>
-      <button class="btn-secondary" onclick="hideModals()">Cancel</button>
+
+    <!-- Other modals (keep existing ones) -->
+    <div class="modal" id="loginModal">
+      <div class="modal-content">
+        <h3>Login</h3>
+        <input id="loginPhone" type="text" placeholder="Phone" />
+        <input id="loginPassword" type="password" placeholder="Password" />
+        <div id="loginMessage" class="modal-message"></div>
+        <div class="modal-actions">
+          <button class="primary" onclick="login()">Login</button>
+          <button class="btn-secondary" onclick="hideModals()">Cancel</button>
+        </div>
+      </div>
     </div>
-  </div>
-</div>
+
+    <div class="modal" id="registerModal">
+      <div class="modal-content">
+        <h3>Register</h3>
+        <input id="regName" type="text" placeholder="Name" />
+        <input id="regPhone" type="text" placeholder="Phone" />
+        <input id="regPassword" type="password" placeholder="Password" />
+        <label style="color:var(--muted);font-size:12px;margin-bottom:10px;display:flex;gap:8px;align-items:center;">
+          <input type="checkbox" id="agreeTerms" />
+          I agree to Terms
+        </label>
+        <div id="registerMessage" class="modal-message"></div>
+        <div class="modal-actions">
+          <button class="primary" onclick="register()">Register</button>
+          <button class="btn-secondary" onclick="hideModals()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="proofModal">
+      <div class="modal-content">
+        <h3>🎯 Round Proof – Verify Fairness</h3>
+        <div style="background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;">
+          <p style="font-size:12px;color:var(--muted);margin:0 0 10px 0;">Server Seed:</p>
+          <code style="word-break:break-all;color:var(--accent);font-size:11px;" id="proofSeed">Loading...</code>
+        </div>
+        <div style="background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;">
+          <p style="font-size:12px;color:var(--muted);margin:0 0 10px 0;">Seed Hash:</p>
+          <code style="word-break:break-all;color:var(--accent);font-size:11px;" id="proofHash">Loading...</code>
+        </div>
+        <div style="background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;">
+          <p style="font-size:12px;color:var(--muted);margin:0 0 10px 0;">Crash Point:</p>
+          <code style="color:var(--accent);font-size:14px;font-weight:bold;" id="proofCrash">Loading...</code>
+        </div>
+        <p style="font-size:12px;color:var(--muted);text-align:center;">✅ This crash was determined by the seed above.<br>You can verify using SHA256(seed) = hash shown.</p>
+        <div class="modal-actions">
+          <button class="primary" onclick="copyProof()">Copy Proof</button>
+          <button class="btn-secondary" onclick="hideModals()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="tcModal">
+      <div class="modal-content">
+        <h3>📋 Terms & Conditions</h3>
+        <div style="max-height:300px;overflow-y:auto;background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;font-size:12px;line-height:1.6;">
+          <h4 style="color:var(--accent);margin-top:0;">FlyZed – Terms & Conditions</h4>
+          <p><strong>1. ACCEPTANCE OF TERMS</strong></p>
+          <p>By using FlyZed, you agree to these Terms & Conditions. If you do not agree, please do not use our service.</p>
+          <p><strong>2. AGE REQUIREMENT</strong></p>
+          <p>You must be at least 18 years old to use this service. By accepting these terms, you confirm you are 18 or older.</p>
+          <p><strong>3. NO REAL MONEY (DEMO MODE)</strong></p>
+          <p>This is currently a DEMO version. No real money is involved. All balances are virtual and for testing purposes only.</p>
+          <p><strong>4. RESPONSIBLE GAMBLING</strong></p>
+          <p>FlyZed promotes responsible gambling. Please gamble responsibly and within your means:</p>
+          <ul style="margin:10px 0;padding-left:20px;"><li>Set limits on how much you spend</li><li>Never gamble money you cannot afford to lose</li><li>Take regular breaks</li><li>Seek help if you have gambling problems</li></ul>
+          <p><strong>5. FAIR PLAY</strong></p>
+          <p>All crash points are generated fairly using cryptographic seeds. You can verify fairness by viewing the proof after each round.</p>
+          <p><strong>6. ACCOUNT RESPONSIBILITY</strong></p>
+          <p>You are responsible for keeping your account credentials secret. FlyZed is not liable for unauthorized access.</p>
+          <p><strong>7. LIMITATION OF LIABILITY</strong></p>
+          <p>FlyZed is provided "as is" without warranties. We are not liable for losses incurred through gameplay.</p>
+          <p><strong>8. CHANGES TO TERMS</strong></p>
+          <p>FlyZed may update these terms at any time. Continued use constitutes acceptance.</p>
+          <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:20px;">Last Updated: 2026-02-12<br>© 2026 FlyZed. All rights reserved.</p>
+        </div>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin:15px 0;color:var(--muted);font-size:13px;">
+          <input type="checkbox" id="tcAgree" style="margin-top:3px;cursor:pointer;flex-shrink:0;">
+          <span>I have read and accept the Terms & Conditions</span>
+        </label>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin:15px 0;color:var(--muted);font-size:13px;">
+          <input type="checkbox" id="ageConfirm" style="margin-top:3px;cursor:pointer;flex-shrink:0;">
+          <span>I confirm I am 18 years old or older</span>
+        </label>
+        <div id="tcMessage" class="modal-message"></div>
+        <div class="modal-actions">
+          <button class="primary" onclick="acceptTC()">Accept & Continue</button>
+          <button class="btn-secondary" onclick="rejectTC()">Decline</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="gamingWarningModal">
+      <div class="modal-content">
+        <h3>⚠️ Responsible Gaming</h3>
+        <div style="background:#d7263d;padding:15px;border-radius:8px;margin:15px 0;color:white;font-size:14px;line-height:1.6;">
+          <p style="margin-top:0;"><strong>🎮 Gaming Reminder</strong></p>
+          <p>You've been playing for a while. Remember to:</p>
+          <ul style="margin:10px 0;padding-left:20px;"><li>Take a break</li><li>Only gamble what you can afford to lose</li><li>Never chase losses</li><li>Set time and money limits</li></ul>
+          <p style="margin-bottom:0;font-size:12px;opacity:0.9;">If you have gambling concerns, please seek help.</p>
+        </div>
+        <div class="modal-actions">
+          <button class="primary" onclick="hideModals()">I Understand</button>
+          <button class="btn-secondary" onclick="selfExclude()">Self-Exclude</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="adminModal">
+      <div class="modal-content" style="max-width:600px;">
+        <h3>⚙️ Admin Dashboard</h3>
+        <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
+          <p style="margin:0 0 12px 0;"><strong>📊 System Status</strong></p>
+          <p style="margin:8px 0;"><span style="color:var(--muted);">Active Rounds:</span> <span id="adminActiveRounds">-</span></p>
+          <p style="margin:8px 0;"><span style="color:var(--muted);">Total Users:</span> <span id="adminUserCount">-</span></p>
+          <p style="margin:8px 0;"><span style="color:var(--muted);">RTP (24h):</span> <span id="adminRTP">-</span>%</p>
+        </div>
+        <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
+          <p style="margin:0 0 12px 0;"><strong>🎮 Game Controls</strong></p>
+          <div class="row">
+            <button class="btn-secondary" onclick="adminPauseGames()" style="flex:1;">⏸ Pause Games</button>
+            <button class="btn-secondary" onclick="adminResumeGames()" style="flex:1;">▶ Resume Games</button>
+          </div>
+        </div>
+        <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
+          <p style="margin:0 0 12px 0;"><strong>💳 Payment Controls</strong></p>
+          <div class="row">
+            <button class="btn-secondary" onclick="adminPausePayments()" style="flex:1;">⏸ Pause Payments</button>
+            <button class="btn-secondary" onclick="adminResumePayments()" style="flex:1;">▶ Resume Payments</button>
+          </div>
+        </div>
+        <div id="adminMessage" class="modal-message"></div>
+        <div class="modal-actions">
+          <button class="primary" onclick="refreshAdminDashboard()">🔄 Refresh</button>
+          <button class="btn-secondary" onclick="hideModals()">Close</button>
+        </div>
+      </div>
+    </div>
   </main>
 
-  <div class="modal" id="loginModal">
-    <div class="modal-content">
-      <h3>Login</h3>
-      <input id="loginPhone" type="text" placeholder="Phone" />
-      <input id="loginPassword" type="password" placeholder="Password" />
-      <div id="loginMessage" class="modal-message"></div>
-      <div class="modal-actions">
-        <button class="primary" onclick="login()">Login</button>
-        <button class="btn-secondary" onclick="hideModals()">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal" id="registerModal">
-    <div class="modal-content">
-      <h3>Register</h3>
-      <input id="regName" type="text" placeholder="Name" />
-      <input id="regPhone" type="text" placeholder="Phone" />
-      <input id="regPassword" type="password" placeholder="Password" />
-      <label style="color:var(--muted);font-size:12px;margin-bottom:10px;display:flex;gap:8px;align-items:center;">
-        <input type="checkbox" id="agreeTerms" />
-        I agree to Terms
-      </label>
-      <div id="registerMessage" class="modal-message"></div>
-      <div class="modal-actions">
-        <button class="primary" onclick="register()">Register</button>
-        <button class="btn-secondary" onclick="hideModals()">Cancel</button>
-      </div>
-    </div>
-  </div>
-  
-  <div class="modal" id="proofModal">
-    <div class="modal-content">
-      <h3>🎯 Round Proof – Verify Fairness</h3>
-      <div style="background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;">
-        <p style="font-size:12px;color:var(--muted);margin:0 0 10px 0;">Server Seed:</p>
-        <code style="word-break:break-all;color:var(--accent);font-size:11px;" id="proofSeed">Loading...</code>
-      </div>
-      <div style="background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;">
-        <p style="font-size:12px;color:var(--muted);margin:0 0 10px 0;">Seed Hash:</p>
-        <code style="word-break:break-all;color:var(--accent);font-size:11px;" id="proofHash">Loading...</code>
-      </div>
-      <div style="background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;">
-        <p style="font-size:12px;color:var(--muted);margin:0 0 10px 0;">Crash Point:</p>
-        <code style="color:var(--accent);font-size:14px;font-weight:bold;" id="proofCrash">Loading...</code>
-      </div>
-      <p style="font-size:12px;color:var(--muted);text-align:center;">✅ This crash was determined by the seed above.<br>You can verify using SHA256(seed) = hash shown.</p>
-      <div class="modal-actions">
-        <button class="primary" onclick="copyProof()">Copy Proof</button>
-        <button class="btn-secondary" onclick="hideModals()">Close</button>
-      </div>
-    </div>
-  </div>
-  
-  <div class="modal" id="tcModal">
-    <div class="modal-content">
-      <h3>📋 Terms & Conditions</h3>
-      <div style="max-height:300px;overflow-y:auto;background:#071a2b;padding:15px;border-radius:8px;margin:15px 0;font-size:12px;line-height:1.6;">
-        <h4 style="color:var(--accent);margin-top:0;">FlyZed – Terms & Conditions</h4>
-        <p><strong>1. ACCEPTANCE OF TERMS</strong></p>
-        <p>By using FlyZed, you agree to these Terms & Conditions. If you do not agree, please do not use our service.</p>
-        <p><strong>2. AGE REQUIREMENT</strong></p>
-        <p>You must be at least 18 years old to use this service. By accepting these terms, you confirm you are 18 or older.</p>
-        <p><strong>3. NO REAL MONEY (DEMO MODE)</strong></p>
-        <p>This is currently a DEMO version. No real money is involved. All balances are virtual and for testing purposes only.</p>
-        <p><strong>4. RESPONSIBLE GAMBLING</strong></p>
-        <p>FlyZed promotes responsible gambling. Please gamble responsibly and within your means:</p>
-        <ul style="margin:10px 0;padding-left:20px;"><li>Set limits on how much you spend</li><li>Never gamble money you cannot afford to lose</li><li>Take regular breaks</li><li>Seek help if you have gambling problems</li></ul>
-        <p><strong>5. FAIR PLAY</strong></p>
-        <p>All crash points are generated fairly using cryptographic seeds. You can verify fairness by viewing the proof after each round.</p>
-        <p><strong>6. ACCOUNT RESPONSIBILITY</strong></p>
-        <p>You are responsible for keeping your account credentials secret. FlyZed is not liable for unauthorized access.</p>
-        <p><strong>7. LIMITATION OF LIABILITY</strong></p>
-        <p>FlyZed is provided "as is" without warranties. We are not liable for losses incurred through gameplay.</p>
-        <p><strong>8. CHANGES TO TERMS</strong></p>
-        <p>FlyZed may update these terms at any time. Continued use constitutes acceptance.</p>
-        <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:20px;">Last Updated: 2026-02-12<br>© 2026 FlyZed. All rights reserved.</p>
-      </div>
-      <label style="display:flex;gap:8px;align-items:flex-start;margin:15px 0;color:var(--muted);font-size:13px;">
-        <input type="checkbox" id="tcAgree" style="margin-top:3px;cursor:pointer;flex-shrink:0;">
-        <span>I have read and accept the Terms & Conditions</span>
-      </label>
-      <label style="display:flex;gap:8px;align-items:flex-start;margin:15px 0;color:var(--muted);font-size:13px;">
-        <input type="checkbox" id="ageConfirm" style="margin-top:3px;cursor:pointer;flex-shrink:0;">
-        <span>I confirm I am 18 years old or older</span>
-      </label>
-      <div id="tcMessage" class="modal-message"></div>
-      <div class="modal-actions">
-        <button class="primary" onclick="acceptTC()">Accept & Continue</button>
-        <button class="btn-secondary" onclick="rejectTC()">Decline</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal" id="gamingWarningModal">
-    <div class="modal-content">
-      <h3>⚠️ Responsible Gaming</h3>
-      <div style="background:#d7263d;padding:15px;border-radius:8px;margin:15px 0;color:white;font-size:14px;line-height:1.6;">
-        <p style="margin-top:0;"><strong>🎮 Gaming Reminder</strong></p>
-        <p>You've been playing for a while. Remember to:</p>
-        <ul style="margin:10px 0;padding-left:20px;"><li>Take a break</li><li>Only gamble what you can afford to lose</li><li>Never chase losses</li><li>Set time and money limits</li></ul>
-        <p style="margin-bottom:0;font-size:12px;opacity:0.9;">If you have gambling concerns, please seek help.</p>
-      </div>
-      <div class="modal-actions">
-        <button class="primary" onclick="hideModals()">I Understand</button>
-        <button class="btn-secondary" onclick="selfExclude()">Self-Exclude</button>
-      </div>
-    </div>
-  </div>
-  
-  <div class="modal" id="adminModal">
-    <div class="modal-content" style="max-width:600px;">
-      <h3>⚙️ Admin Dashboard</h3>
-      <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
-        <p style="margin:0 0 12px 0;"><strong>📊 System Status</strong></p>
-        <p style="margin:8px 0;"><span style="color:var(--muted);">Active Rounds:</span> <span id="adminActiveRounds">-</span></p>
-        <p style="margin:8px 0;"><span style="color:var(--muted);">Total Users:</span> <span id="adminUserCount">-</span></p>
-        <p style="margin:8px 0;"><span style="color:var(--muted);">RTP (24h):</span> <span id="adminRTP">-</span>%</p>
-      </div>
-      <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
-        <p style="margin:0 0 12px 0;"><strong>🎮 Game Controls</strong></p>
-        <div class="row">
-          <button class="btn-secondary" onclick="adminPauseGames()" style="flex:1;">⏸ Pause Games</button>
-          <button class="btn-secondary" onclick="adminResumeGames()" style="flex:1;">▶ Resume Games</button>
-        </div>
-      </div>
-      <div style="background:var(--bg-secondary);padding:16px;border-radius:10px;margin:16px 0;font-size:13px;">
-        <p style="margin:0 0 12px 0;"><strong>💳 Payment Controls</strong></p>
-        <div class="row">
-          <button class="btn-secondary" onclick="adminPausePayments()" style="flex:1;">⏸ Pause Payments</button>
-          <button class="btn-secondary" onclick="adminResumePayments()" style="flex:1;">▶ Resume Payments</button>
-        </div>
-      </div>
-      <div id="adminMessage" class="modal-message"></div>
-      <div class="modal-actions">
-        <button class="primary" onclick="refreshAdminDashboard()">🔄 Refresh</button>
-        <button class="btn-secondary" onclick="hideModals()">Close</button>
-      </div>
-    </div>
-  </div>
-  
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <script>
     const API_BASE = 'https://ka-ndeke-backend-5dgy.onrender.com/api';
     const TOKEN_KEY = 'flyzed_token';
+    const WHATSAPP_NUMBER = '260761948460'; // ✅ NEW: Your WhatsApp number
     let authMode = null;
     let currentUser = null;
     let guestBalance = 10;
@@ -339,92 +416,121 @@
     const registerBtn = document.getElementById('registerBtn');
     const logoutBtn = document.getElementById('logoutBtn');
 
-    // Open the check status modal
-function openCheckStatus() {
-  document.getElementById('statusTransactionId').value = '';
-  document.getElementById('statusMessage').textContent = '';
-  document.getElementById('statusMessage').className = 'modal-message';
-  document.getElementById('statusDetails').style.display = 'none';
-  document.getElementById('checkStatusModal').classList.add('show');
-}
+    // ✅ NEW: WhatsApp Support Functions
+    function openWhatsAppSupport() {
+      document.getElementById('withdrawAmount').value = '';
+      document.getElementById('withdrawPhone').value = '';
+      document.getElementById('withdrawMessage').value = '';
+      document.getElementById('whatsappMessage').textContent = '';
+      document.getElementById('whatsappMessage').className = 'modal-message';
+      document.getElementById('whatsappModal').classList.add('show');
+    }
 
-// Check transaction status
-async function checkTransactionStatus() {
-  const transactionId = document.getElementById('statusTransactionId').value.trim();
-  
-  if (!transactionId) {
-    showStatusMessage('Please enter a Transaction ID', true);
-    return;
-  }
+    function hideWhatsAppModal() {
+      document.getElementById('whatsappModal').classList.remove('show');
+    }
 
-  try {
-    console.log('🔍 Checking transaction status:', transactionId);
-    showStatusMessage('Checking status...', false);
+    function sendWhatsAppMessage() {
+      const amount = document.getElementById('withdrawAmount').value.trim();
+      const phone = document.getElementById('withdrawPhone').value.trim();
+      const message = document.getElementById('withdrawMessage').value.trim();
 
-    const response = await apiFetch(`/payments/status/${transactionId}`, { 
-      method: 'GET' 
-    }, true);
-
-    console.log('Status response:', response);
-
-    if (response.ok) {
-      // ✅ Success - Display details
-      displayStatusDetails(response);
-      
-      let statusColor = 'var(--warning)';
-      if (response.status === 'confirmed' || response.status === 'completed') {
-        statusColor = 'var(--success)';
-      } else if (response.status === 'failed') {
-        statusColor = 'var(--danger)';
+      if (!amount || !phone) {
+        showWhatsAppMessage('Please enter both amount and phone number', true);
+        return;
       }
 
-      showStatusMessage(
-        `✅ ${response.message}`, 
-        false
-      );
+      if (isNaN(amount) || Number(amount) < 5) {
+        showWhatsAppMessage('Minimum withdrawal is K5', true);
+        return;
+      }
 
-    } else {
-      showStatusMessage('❌ ' + (response.message || 'Transaction not found'), true);
+      const userInfo = authMode ? `\nUser: ${currentUser?.username || 'N/A'}\nPhone: ${currentUser?.phone || 'N/A'}` : '';
+      
+      const whatsappMessage = `Hi, I would like to withdraw K${amount} to ${phone}${message ? '\nNote: ' + message : ''}${userInfo}`;
+      
+      const encodedMessage = encodeURIComponent(whatsappMessage);
+      const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
+      
+      window.open(whatsappUrl, '_blank');
+      
+      showWhatsAppMessage('✅ Opening WhatsApp...', false);
+      setTimeout(() => hideWhatsAppModal(), 1500);
     }
-  } catch (err) {
-    console.error('❌ Status check error:', err);
-    showStatusMessage('❌ Error: ' + err.message, true);
-  }
-}
 
-// Display transaction details
-function displayStatusDetails(response) {
-  const detailsDiv = document.getElementById('statusDetails');
-  
-  document.getElementById('detailPaymentId').textContent = response.transactionId || 'N/A';
-  document.getElementById('detailStatus').textContent = (response.status || 'Unknown').toUpperCase();
-  
-  // Color code the status
-  const statusSpan = document.getElementById('detailStatus');
-  if (response.status === 'confirmed' || response.status === 'completed') {
-    statusSpan.style.color = 'var(--success)';
-  } else if (response.status === 'pending') {
-    statusSpan.style.color = 'var(--warning)';
-  } else {
-    statusSpan.style.color = 'var(--danger)';
-  }
-  
-  document.getElementById('detailAmount').textContent = 'K ' + Number(response.amount || 0).toFixed(2);
-  document.getElementById('detailType').textContent = (response.type || 'deposit').toUpperCase();
-  
-  const createdDate = new Date(response.createdAt || Date.now()).toLocaleString();
-  document.getElementById('detailCreated').textContent = createdDate;
-  
-  detailsDiv.style.display = 'block';
-}
+    function showWhatsAppMessage(message, isError) {
+      const el = document.getElementById('whatsappMessage');
+      el.textContent = message;
+      el.className = `modal-message ${isError ? 'error' : 'success'}`;
+    }
 
-// Show status message
-function showStatusMessage(message, isError) {
-  const el = document.getElementById('statusMessage');
-  el.textContent = message;
-  el.className = `modal-message ${isError ? 'error' : 'success'}`;
-}
-  
+    // Open check status modal
+    function openCheckStatus() {
+      document.getElementById('statusTransactionId').value = '';
+      document.getElementById('statusMessage').textContent = '';
+      document.getElementById('statusMessage').className = 'modal-message';
+      document.getElementById('statusDetails').style.display = 'none';
+      document.getElementById('checkStatusModal').classList.add('show');
+    }
+
+    // Check transaction status
+    async function checkTransactionStatus() {
+      const transactionId = document.getElementById('statusTransactionId').value.trim();
+      
+      if (!transactionId) {
+        showStatusMessage('Please enter a Transaction ID', true);
+        return;
+      }
+
+      try {
+        showStatusMessage('Checking status...', false);
+
+        const response = await apiFetch(`/payments/status/${transactionId}`, { 
+          method: 'GET' 
+        }, true);
+
+        if (response.ok) {
+          displayStatusDetails(response);
+          showStatusMessage(`✅ ${response.message}`, false);
+        } else {
+          showStatusMessage('❌ ' + (response.message || 'Transaction not found'), true);
+        }
+      } catch (err) {
+        showStatusMessage('❌ Error: ' + err.message, true);
+      }
+    }
+
+    // Display transaction details
+    function displayStatusDetails(response) {
+      const detailsDiv = document.getElementById('statusDetails');
+      
+      document.getElementById('detailPaymentId').textContent = response.transactionId || 'N/A';
+      document.getElementById('detailStatus').textContent = (response.status || 'Unknown').toUpperCase();
+      
+      const statusSpan = document.getElementById('detailStatus');
+      if (response.status === 'confirmed' || response.status === 'completed') {
+        statusSpan.style.color = 'var(--success)';
+      } else if (response.status === 'pending') {
+        statusSpan.style.color = 'var(--warning)';
+      } else {
+        statusSpan.style.color = 'var(--danger)';
+      }
+      
+      document.getElementById('detailAmount').textContent = 'K ' + Number(response.amount || 0).toFixed(2);
+      document.getElementById('detailType').textContent = (response.type || 'deposit').toUpperCase();
+      
+      const createdDate = new Date(response.createdAt || Date.now()).toLocaleString();
+      document.getElementById('detailCreated').textContent = createdDate;
+      
+      detailsDiv.style.display = 'block';
+    }
+
+    function showStatusMessage(message, isError) {
+      const el = document.getElementById('statusMessage');
+      el.textContent = message;
+      el.className = `modal-message ${isError ? 'error' : 'success'}`;
+    }
+
     function generateUUID() {
       return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         const r = Math.random() * 16 | 0;
@@ -498,7 +604,8 @@ function showStatusMessage(message, isError) {
       document.getElementById('tcModal').classList.remove('show');
       document.getElementById('gamingWarningModal').classList.remove('show');
       document.getElementById('adminModal').classList.remove('show');
-      document.getElementById('checkStatusModal').classList.remove('show'); 
+      document.getElementById('checkStatusModal').classList.remove('show');
+      document.getElementById('whatsappModal').classList.remove('show');
     }
 
     function showMessage(modalId, message, isError) {
@@ -537,7 +644,6 @@ function showStatusMessage(message, isError) {
             localCrashDetected = true;
             lastCrashTime = Date.now();
             lastKnownCrashPoint = status.multiplier || liveMultiplier;
-            console.log('🛑 CRASH DETECTED - Disabling cashOut:', { crashPoint: lastKnownCrashPoint, detectedAt: new Date(lastCrashTime).toLocaleTimeString() });
           }
           roundActive = false;
           crashed = true;
@@ -565,7 +671,6 @@ function showStatusMessage(message, isError) {
         document.getElementById('registerModal').classList.remove('show');
         showTC();
       } catch (err) {
-        console.error('Register error:', err);
         showMessage('registerMessage', err.message || 'Registration failed', true);
       }
     }
@@ -587,7 +692,6 @@ function showStatusMessage(message, isError) {
             .catch(() => { tcAccepted = true; });
         }, 1000);
       } catch (err) {
-        console.error('Login error:', err);
         showMessage('loginMessage', err.message || 'Login failed', true);
       }
     }
@@ -692,7 +796,6 @@ function showStatusMessage(message, isError) {
         }
       } catch (err) {
         alert('Cash out failed: ' + err.message);
-        console.error('CashOut error:', err);
       }
     }
 
@@ -712,16 +815,13 @@ function showStatusMessage(message, isError) {
         return;
       }
       try {
-        console.log('📤 Sending deposit request:', { amount, transactionUUID, timestamp: new Date().toISOString() });
         const responseData = await apiFetch('/payments/deposit', { method: 'POST', body: { amount: amount, transactionUUID: transactionUUID } }, true);
-        console.log('📥 Deposit response:', responseData);
         if (responseData && responseData.ok) {
           alert(`✅ Deposit initiated!\n\nTransaction ID:\n${responseData.transactionId}\n\nPlease confirm on your phone.`);
         } else {
           alert('❌ ' + (responseData?.message || 'Deposit failed'));
         }
       } catch (err) {
-        console.error('❌ Deposit error:', err);
         alert('❌ ' + err.message);
       }
     }
@@ -746,9 +846,7 @@ function showStatusMessage(message, isError) {
         return;
       }
       try {
-        console.log('📤 Sending withdraw request:', { amount, transactionUUID, timestamp: new Date().toISOString() });
         const responseData = await apiFetch('/payments/withdraw', { method: 'POST', body: { amount: amount, transactionUUID: transactionUUID } }, true);
-        console.log('📥 Withdraw response:', responseData);
         if (responseData && responseData.ok) {
           currentUser.balance = responseData.newBalance;
           updateUI();
@@ -757,7 +855,6 @@ function showStatusMessage(message, isError) {
           alert('❌ ' + (responseData?.message || 'Withdrawal failed'));
         }
       } catch (err) {
-        console.error('❌ Withdraw error:', err);
         alert('❌ ' + err.message);
       }
     }
@@ -786,9 +883,8 @@ function showStatusMessage(message, isError) {
       setTimeout(async () => {
         try {
           const status = await apiFetch('/game/status', { method: 'GET' }, false);
-          console.log('✅ Frontend-Backend sync verified:', { roundId: status.roundId, status: status.status, multiplier: status.multiplier, serverTime: new Date().toISOString() });
         } catch (err) {
-          console.warn('⚠️ Could not verify sync:', err.message);
+          console.warn('Could not verify sync:', err.message);
         }
       }, 500);
     });
@@ -888,7 +984,6 @@ function showStatusMessage(message, isError) {
         document.getElementById('proofCrash').textContent = (proof.crashPoint || 'N/A') + 'x';
         document.getElementById('proofModal').classList.add('show');
       } catch (err) {
-        console.error('Error fetching proof:', err);
         alert('Error loading proof: ' + err.message);
       }
     }
@@ -931,51 +1026,16 @@ function showStatusMessage(message, isError) {
             const translateX = Math.min(300, multiplier * 30);
             const translateY = multiplier * -20;
             planeEl.style.transform = `translateX(${translateX}px) translateY(${translateY}px) rotate(${multiplier * 5}deg)`;
-            if (data.status === 'running' && !roundActive) {
-              roundActive = true;
-              document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
-            }
           } catch (err) {
             console.warn('Error processing multiplier:', err);
           }
         });
-        socket.on('crash', (data) => {
-          try {
-            if (!data) return;
-            if (roundActive) {
-              roundActive = false;
-              crashed = true;
-              running = false;
-              const crashPoint = Number(data.crashPoint || 1).toFixed(2);
-              document.getElementById('status').textContent = `💥 Crashed at ${crashPoint}x`;
-              document.getElementById('cashOutBtn').disabled = true;
-              document.getElementById('playBtn').disabled = false;
-              document.getElementById('viewProofBtn').disabled = false;
-              console.log('💥 Round crashed at:', crashPoint);
-            }
-          } catch (err) {
-            console.warn('Error processing crash:', err);
-          }
-        });
-        socket.on('roundStarted', (data) => {
-          try {
-            console.log('🎮 Round started:', data);
-            roundActive = true;
-            document.getElementById('status').textContent = '🎮 Round active! Place your bet.';
-          } catch (err) {
-            console.warn('Error processing roundStarted:', err);
-          }
-        });
-        socket.on('disconnect', (reason) => {
-          console.warn('⚠️ Socket.IO disconnected:', reason);
+        socket.on('disconnect', () => {
+          console.warn('⚠️ Socket.IO disconnected');
           document.title = '🛩️ FlyZed (Reconnecting...)';
-          if (useWebSocket && reason !== 'io client namespace disconnect') {
+          if (useWebSocket) {
             startHttpPolling();
           }
-        });
-        socket.on('error', (error) => {
-          console.error('❌ Socket.IO error:', error);
-          document.title = '🛩️ FlyZed (Error)';
         });
       } catch (err) {
         console.error('Failed to initialize Socket.IO:', err);
@@ -1013,12 +1073,7 @@ function showStatusMessage(message, isError) {
         await apiFetch('/legal/verify-age', { method: 'POST', body: { confirmed: true } }, true);
         tcAccepted = true;
         document.getElementById('tcModal').classList.remove('show');
-        const msg = document.getElementById('tcMessage');
-        msg.className = 'modal-message success';
-        msg.textContent = '✅ You can now play!';
-        console.log('✅ User accepted T&C and verified age');
       } catch (err) {
-        console.error('Error accepting T&C:', err);
         const msg = document.getElementById('tcMessage');
         msg.className = 'modal-message error';
         msg.textContent = '❌ Error: ' + err.message;
@@ -1064,7 +1119,6 @@ function showStatusMessage(message, isError) {
     }
 
     window.addEventListener('load', () => {
-      console.log('🚀 Page loaded, initializing real-time engine...');
       initializeSocket();
     });
 
