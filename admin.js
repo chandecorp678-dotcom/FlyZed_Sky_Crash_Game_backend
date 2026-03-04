@@ -222,4 +222,441 @@ router.get('/player-outcomes/:userId', wrapAsync(async (req, res) => {
   }
 }));
 
+// ============ NEW ADMIN ENDPOINTS ============
+
+/**
+ * ✅ GET /api/admin/users
+ * Display all users with pagination
+ */
+router.get('/users', wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 100));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+
+  try {
+    const usersRes = await db.query(
+      `SELECT id, username, phone, balance, freerounds, zils_uuid, createdat, updatedat 
+       FROM users 
+       ORDER BY createdat DESC 
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+
+    const countRes = await db.query(`SELECT COUNT(*) as total FROM users`);
+    const total = Number(countRes.rows[0].total);
+
+    logger.info('admin.users.list', { total, limit, offset });
+
+    return res.json({
+      ok: true,
+      users: usersRes.rows || [],
+      total,
+      limit,
+      offset,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    logger.error('admin.users.error', { message: err.message });
+    return sendError(res, 500, 'Failed to fetch users');
+  }
+}));
+
+/**
+ * ✅ GET /api/admin/payments
+ * Check payments with filters (status, type, limit)
+ */
+router.get('/payments', wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const status = req.query.status || null; // pending, confirmed, failed, completed
+  const type = req.query.type || null; // deposit, withdraw
+  const limit = Math.min(10000, Math.max(1, Number(req.query.limit) || 100));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+
+  try {
+    let query = `SELECT id, user_id, type, amount, phone, mtn_transaction_id, external_id, status, mtn_status, created_at, updated_at FROM payments WHERE 1=1`;
+    const params = [];
+
+    if (status) {
+      query += ` AND status = $${params.length + 1}`;
+      params.push(status);
+    }
+    if (type) {
+      query += ` AND type = $${params.length + 1}`;
+      params.push(type);
+    }
+
+    query += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+
+    const paymentsRes = await db.query(query, params);
+
+    logger.info('admin.payments.list', { 
+      count: paymentsRes.rowCount, 
+      status, 
+      type, 
+      limit, 
+      offset 
+    });
+
+    return res.json({
+      ok: true,
+      payments: paymentsRes.rows || [],
+      count: paymentsRes.rowCount,
+      limit,
+      offset,
+      filters: { status, type },
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    logger.error('admin.payments.error', { message: err.message });
+    return sendError(res, 500, 'Failed to fetch payments');
+  }
+}));
+
+/**
+ * ✅ POST /api/admin/payments/:transaction_id/mark-failed
+ * Manually fail a transaction
+ */
+router.post('/payments/:transaction_id/mark-failed', express.json(), wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const transactionId = req.params.transaction_id;
+  const { reason } = req.body || {};
+
+  if (!transactionId) {
+    return sendError(res, 400, 'transaction_id required');
+  }
+
+  try {
+    const paymentRes = await db.query(
+      `SELECT id, user_id, type, amount, status FROM payments 
+       WHERE id = $1 OR mtn_transaction_id = $1 OR external_id = $1`,
+      [transactionId]
+    );
+
+    if (!paymentRes.rowCount) {
+      return sendError(res, 404, 'Payment not found');
+    }
+
+    const payment = paymentRes.rows[0];
+
+    // Update payment status to failed
+    await db.query(
+      `UPDATE payments 
+       SET status = 'failed', mtn_status = $1, updated_at = NOW() 
+       WHERE id = $2`,
+      [reason || 'Manual failure', payment.id]
+    );
+
+    // If it's a withdrawal, refund the user
+    if (payment.type === 'withdraw') {
+      await db.query(
+        `UPDATE users 
+         SET balance = balance + $1, updatedat = NOW() 
+         WHERE id = $2`,
+        [payment.amount, payment.user_id]
+      );
+
+      logger.info('admin.payments.mark_failed.refunded', { 
+        paymentId: payment.id, 
+        userId: payment.user_id, 
+        amount: payment.amount,
+        reason
+      });
+    } else {
+      logger.info('admin.payments.mark_failed', { 
+        paymentId: payment.id, 
+        reason
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: `✅ Payment marked as failed${payment.type === 'withdraw' ? ' and user refunded' : ''}`,
+      paymentId: payment.id,
+      status: 'failed',
+      reason,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    logger.error('admin.payments.mark_failed.error', { 
+      transactionId, 
+      message: err.message 
+    });
+    return sendError(res, 500, 'Failed to mark payment as failed');
+  }
+}));
+
+/**
+ * ✅ POST /api/admin/payments/:transaction_id/mark-confirmed
+ * Manually confirm a transaction
+ */
+router.post('/payments/:transaction_id/mark-confirmed', express.json(), wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const transactionId = req.params.transaction_id;
+
+  if (!transactionId) {
+    return sendError(res, 400, 'transaction_id required');
+  }
+
+  try {
+    const paymentRes = await db.query(
+      `SELECT id, user_id, type, amount, status FROM payments 
+       WHERE id = $1 OR mtn_transaction_id = $1 OR external_id = $1`,
+      [transactionId]
+    );
+
+    if (!paymentRes.rowCount) {
+      return sendError(res, 404, 'Payment not found');
+    }
+
+    const payment = paymentRes.rows[0];
+
+    // Update payment status to confirmed
+    await db.query(
+      `UPDATE payments 
+       SET status = 'confirmed', mtn_status = 'CONFIRMED', updated_at = NOW() 
+       WHERE id = $1`,
+      [payment.id]
+    );
+
+    // If it's a deposit, credit the user
+    if (payment.type === 'deposit') {
+      await db.query(
+        `UPDATE users 
+         SET balance = balance + $1, updatedat = NOW() 
+         WHERE id = $2`,
+        [payment.amount, payment.user_id]
+      );
+
+      logger.info('admin.payments.mark_confirmed.credited', { 
+        paymentId: payment.id, 
+        userId: payment.user_id, 
+        amount: payment.amount
+      });
+    } else {
+      logger.info('admin.payments.mark_confirmed', { 
+        paymentId: payment.id
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: `✅ Payment marked as confirmed${payment.type === 'deposit' ? ' and user credited' : ''}`,
+      paymentId: payment.id,
+      status: 'confirmed',
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    logger.error('admin.payments.mark_confirmed.error', { 
+      transactionId, 
+      message: err.message 
+    });
+    return sendError(res, 500, 'Failed to mark payment as confirmed');
+  }
+}));
+
+/**
+ * ✅ POST /api/admin/payments/:transaction_id/check-zils-status
+ * Check ZILS transaction status and update DB
+ */
+router.post('/payments/:transaction_id/check-zils-status', express.json(), wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const transactionId = req.params.transaction_id;
+
+  if (!transactionId) {
+    return sendError(res, 400, 'transaction_id required');
+  }
+
+  try {
+    const zils = require('./zils');
+
+    // Check status with ZILS
+    const zilsStatus = await zils.checkTransactionStatus(transactionId);
+
+    // Find payment in DB
+    const paymentRes = await db.query(
+      `SELECT id, user_id, type, amount, status FROM payments 
+       WHERE mtn_transaction_id = $1 OR id = $1 OR external_id = $1`,
+      [transactionId]
+    );
+
+    if (!paymentRes.rowCount) {
+      return sendError(res, 404, 'Payment not found in database');
+    }
+
+    const payment = paymentRes.rows[0];
+    const newStatus = (zilsStatus.status || 'unknown').toLowerCase();
+
+    // Update DB with ZILS status
+    await db.query(
+      `UPDATE payments 
+       SET mtn_status = $1, updated_at = NOW() 
+       WHERE id = $2`,
+      [zilsStatus.status, payment.id]
+    );
+
+    logger.info('admin.payments.check_zils_status', { 
+      paymentId: payment.id, 
+      zilsStatus: newStatus
+    });
+
+    return res.json({
+      ok: true,
+      paymentId: payment.id,
+      dbStatus: payment.status,
+      zilsStatus: zilsStatus.status,
+      details: zilsStatus.details || {},
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    logger.error('admin.payments.check_zils_status.error', { 
+      transactionId, 
+      message: err.message 
+    });
+    return sendError(res, 500, 'Failed to check ZILS status', err.message);
+  }
+}));
+
+/**
+ * ✅ GET /api/admin/rounds
+ * Get rounds with limit
+ */
+router.get('/rounds', wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const limit = Math.min(10000, Math.max(1, Number(req.query.limit) || 100));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+
+  try {
+    const roundsRes = await db.query(
+      `SELECT id, round_id, crash_point, server_seed_hash, started_at, ended_at, settlement_closed_at, meta, createdat 
+       FROM rounds 
+       ORDER BY started_at DESC 
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+
+    const countRes = await db.query(`SELECT COUNT(*) as total FROM rounds`);
+    const total = Number(countRes.rows[0].total);
+
+    logger.info('admin.rounds.list', { total, limit, offset });
+
+    return res.json({
+      ok: true,
+      rounds: roundsRes.rows || [],
+      total,
+      limit,
+      offset,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    logger.error('admin.rounds.error', { message: err.message });
+    return sendError(res, 500, 'Failed to fetch rounds');
+  }
+}));
+
+/**
+ * ✅ POST /api/admin/reset-db
+ * Reset database (DELETE all data)
+ * ⚠️ DANGEROUS: Use with caution!
+ */
+router.post('/reset-db', express.json(), wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+
+  try {
+    logger.warn('admin.reset_db.starting', { 
+      message: '⚠️ DANGEROUS OPERATION: Resetting all database tables'
+    });
+
+    // Reset in order of dependencies (reverse of FK constraints)
+    await db.query(`TRUNCATE TABLE payment_audit CASCADE`);
+    await db.query(`TRUNCATE TABLE payments CASCADE`);
+    await db.query(`TRUNCATE TABLE bets CASCADE`);
+    await db.query(`TRUNCATE TABLE rounds CASCADE`);
+    await db.query(`TRUNCATE TABLE seed_commits CASCADE`);
+    await db.query(`TRUNCATE TABLE monitoring_snapshots CASCADE`);
+    await db.query(`TRUNCATE TABLE legal_audit_log CASCADE`);
+    await db.query(`TRUNCATE TABLE self_exclusion CASCADE`);
+    await db.query(`TRUNCATE TABLE legal_compliance CASCADE`);
+    await db.query(`TRUNCATE TABLE kill_switch_log CASCADE`);
+    await db.query(`TRUNCATE TABLE player_outcome_audit CASCADE`);
+    await db.query(`TRUNCATE TABLE users CASCADE`);
+
+    logger.warn('admin.reset_db.success', { 
+      message: '✅ Database reset complete. All tables cleared.'
+    });
+
+    return res.json({
+      ok: true,
+      message: '✅ Database has been RESET. All tables cleared.',
+      tablesCleared: [
+        'users',
+        'rounds',
+        'bets',
+        'seed_commits',
+        'payments',
+        'payment_audit',
+        'monitoring_snapshots',
+        'legal_compliance',
+        'legal_audit_log',
+        'self_exclusion',
+        'kill_switch_log',
+        'player_outcome_audit'
+      ],
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    logger.error('admin.reset_db.error', { message: err.message });
+    return sendError(res, 500, 'Failed to reset database', err.message);
+  }
+}));
+
+/**
+ * ✅ GET /api/admin/metrics
+ * Get all metrics (game stats, RTP, etc.)
+ */
+router.get('/metrics', wrapAsync(async (req, res) => {
+  const db = req.app.locals.db;
+  const metrics = require('./metrics');
+
+  try {
+    // Get in-memory metrics
+    const metricsData = metrics.getMetrics();
+
+    // Get RTP from database
+    const monitoring = require('./monitoring');
+    const rtp = await monitoring.calculateRTP(db, 24);
+
+    // Get system health
+    const health = await monitoring.getSystemHealth(db);
+
+    logger.info('admin.metrics.fetched', { 
+      totalBets: metricsData.totalBets,
+      rtp: rtp?.rtp,
+      activeRounds: health.activeRounds
+    });
+
+    return res.json({
+      ok: true,
+      metrics: {
+        totalBets: metricsData.totalBets,
+        totalVolume: metricsData.totalVolume,
+        totalCashouts: metricsData.totalCashouts,
+        totalPayouts: metricsData.totalPayouts,
+        lastUpdated: metricsData.lastUpdated,
+        rtp: rtp?.rtp || 0,
+        rtpBets: rtp?.betCount || 0,
+        rtpWins: rtp?.wonCount || 0,
+        rtpLosses: rtp?.lostCount || 0,
+        activeRounds: health.activeRounds || 0,
+        pendingPayments: health.pendingPayments || 0,
+        totalUsers: health.userCount || 0
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    logger.error('admin.metrics.error', { message: err.message });
+    return sendError(res, 500, 'Failed to fetch metrics');
+  }
+}));
+
 module.exports = router;
