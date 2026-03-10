@@ -317,6 +317,13 @@ async function start() {
     await initDb();
     app.locals.db = pool;
 
+    // ============ AUTO-RUN MIGRATIONS ON STARTUP ============
+const { runAutoMigrations } = require('./auto-migrate');
+logger.info('server.startup.running_auto_migrations');
+await runAutoMigrations(pool);
+logger.info('server.startup.auto_migrations_complete');
+// ============ END AUTO MIGRATIONS ============
+
     // ============ RUN MIGRATION ON STARTUP ============
 logger.info('migration.balance_column.starting');
 await fixBalanceColumnIfNeeded(pool);
