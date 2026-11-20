@@ -19,7 +19,7 @@ router.use(optionalAuth);
 // mount auth & user endpoints
 router.use("/", users);
 
-// mount payment endpoints (Phase 9.3)
+// mount payment endpoints (ZILS-backed real-money wallet)
 router.use("/payments", payments);
 
 // mount legal compliance endpoints (Phase 11)
@@ -37,7 +37,16 @@ try {
   console.warn("admin.js not loaded.");
 }
 
-// mount game routes (PRODUCTION)
+// Mode-isolated demo wallet and bets. This shares the current game round/multiplier,
+// but demo wallet activity is recorded separately from users.balance and payments.
+const demoGame = require("./demo-mode");
+router.use("/demo", demoGame);
+
+// Prevent legacy real-money routes from interpreting demo requests as real bets.
+const guardRealMoneyGameMode = require("./demo-mode-guard");
+router.use("/game", guardRealMoneyGameMode);
+
+// mount existing real-money game routes
 const game = require("./game");
 router.use("/game", game);
 
