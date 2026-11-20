@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0e27">
+  <title>FlyZed — Demo Mode</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0a0e27;--panel:#1a1f3a;--accent:#00d4ff;--muted:#c5cad6;--green:#00d981;--red:#ff5577}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:#fff;font:16px system-ui,sans-serif}
+    header,main{max-width:760px;margin:auto;padding:18px}header{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--panel)}
+    h1{font-size:21px;color:var(--accent);margin:0}main{padding-top:22px}.card{background:var(--panel);padding:18px;border-radius:12px;margin:12px 0}
+    .notice{color:#ffe8a3;background:#453616;padding:12px;border-radius:8px;line-height:1.5}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .balance{font-size:25px;font-weight:700;color:var(--green)}button,input{font:inherit;border:0;border-radius:8px;padding:12px}
+    input{background:#10182b;color:white;flex:1;min-width:130px}button{background:var(--accent);color:#00111b;font-weight:700;cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}
+    .secondary{background:#303a58;color:white}.status{min-height:28px;color:var(--muted);margin:12px 0}.hidden{display:none!important}
+    li{margin:8px 0;font-size:14px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <header><h1>🛩️ FlyZed — DEMO MODE</h1><a href="/" style="color:#00d4ff">Return to game</a></header>
+  <main>
+    <div class="notice"><strong>Demo play only.</strong> Credits are virtual, have no monetary value, and cannot be transferred, deposited, or withdrawn.</div>
+    <section class="card">
+      <div>Virtual credit balance</div><div class="balance"><span id="balance">Loading…</span> VC</div>
+      <button id="resetButton" class="hidden" onclick="resetCredits()">Reset demo balance to 1,000 VC</button>
+      <div id="resetHint" class="status"></div>
+    </section>
+    <section class="card">
+      <div class="row"><input id="betAmount" type="number" min="1" max="9.99" step="0.01" value="5" aria-label="Bet amount in virtual credits"><button id="playButton" onclick="placeBet()">Place demo bet</button><button id="cashoutButton" class="secondary" disabled onclick="cashOut()">Cash out</button></div>
+      <div id="status" class="status">Connect your account to play.</div>
+      <div>Shared round multiplier: <strong id="multiplier">—</strong></div>
+    </section>
+    <section class="card"><strong>Recent demo bets</strong><ul id="history"><li>No demo bets yet.</li></ul></section>
+    <section class="card"><strong>Account login</strong><p style="color:#c5cad6">Log in on the FlyZed game using this same website and account, then open this demo page again. Your login session is shared on the same origin.</p></section>
+  </main>
+<script>
+  const API='/api';const TOKEN_KEY='flyzed_token';let activeBetId=null;let playing=false;
+  const el=id=>document.getElementById(id);
+  async function api(path,method='GET',body){const headers={};const token=localStorage.getItem(TOKEN_KEY);if(token)headers.Authorization='Bearer '+token;if(body){headers['Content-Type']='application/json'}const response=await fetch(API+path,{method,headers,body:body?JSON.stringify(body):undefined});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||`Request failed (${response.status})`);return data}
+  function showError(err){el('status').textContent=err.message}
+  async function loadWallet(){try{const wallet=await api('/demo/wallet');el('balance').textContent=Number(wallet.balance).toFixed(2);el('resetButton').classList.toggle('hidden',Number(wallet.balance)!==0||playing);el('resetHint').textContent=Number(wallet.balance)===0?'Balance is zero. Reset to continue demo play.':''}catch(err){showError(err)}}
+  async function loadHistory(){try{const result=await api('/demo/history?limit=10');const list=el('history');list.replaceChildren();if(!result.bets.length){list.innerHTML='<li>No demo bets yet.</li>';return}for(const bet of result.bets){const item=document.createElement('li');item.textContent=`${bet.status.toUpperCase()} — ${Number(bet.bet_amount).toFixed(2)} VC on round ${bet.round_id}; payout ${Number(bet.payout).toFixed(2)} VC`;list.appendChild(item)}}catch(err){showError(err)}}
+  async function refreshRound(){try{const round=await api('/game/status');el('multiplier').textContent=round.multiplier?Number(round.multiplier).toFixed(2)+'x':'—';if(activeBetId&&round.status==='crashed'){playing=false;activeBetId=null;el('cashoutButton').disabled=true;el('playButton').disabled=false;el('status').textContent='Round crashed. Your demo bet lost.';await loadWallet();await loadHistory()}}catch(err){}}
+  async function placeBet(){try{if(playing)return;const amount=Number(el('betAmount').value);const result=await api('/demo/start','POST',{betAmount:amount});activeBetId=result.betId;playing=true;el('cashoutButton').disabled=false;el('playButton').disabled=true;el('status').textContent='Demo bet placed on shared round '+result.roundId;await loadWallet()}catch(err){showError(err)}}
+  async function cashOut(){if(!activeBetId)return;try{const result=await api('/demo/cashout','POST',{betId:activeBetId});playing=false;activeBetId=null;el('cashoutButton').disabled=true;el('playButton').disabled=false;el('status').textContent=result.success?`Cashed out at ${Number(result.multiplier).toFixed(2)}x — ${Number(result.payout).toFixed(2)} VC credited.`:'No payout: the round had already crashed.';await loadWallet();await loadHistory()}catch(err){showError(err)}}
+  async function resetCredits(){try{const result=await api('/demo/wallet/reset','POST',{});el('balance').textContent=Number(result.balance).toFixed(2);el('resetButton').classList.add('hidden');el('resetHint').textContent='Demo balance reset to 1,000 VC.';el('status').textContent='Ready to play demo mode.'}catch(err){showError(err)}}
+  loadWallet();loadHistory();refreshRound();setInterval(refreshRound,250);
+</script>
+</body>
+</html>
